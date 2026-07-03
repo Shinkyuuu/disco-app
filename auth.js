@@ -23,7 +23,8 @@ export function verifySessionToken(token) {
 
 const { DISCORD_APPLICATION_ID, DISCORD_CLIENT_SECRET } = process.env;
 const PORT_NUMBER = process.env.PORT || 3000;
-const REDIRECT_URI = `http://localhost:${PORT_NUMBER}/auth/callback`;
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT_NUMBER}`;
+const REDIRECT_URI = `${PUBLIC_BASE_URL}/auth/callback`;
 
 export function buildAuthorizeUrl() {
   const url = new URL('https://discord.com/oauth2/authorize');

@@ -177,7 +177,10 @@ if (!gotLock) {
 
 function registerIpcHandlers() {
   ipcMain.handle('open-login', (_event, serverAddress) => {
-    shell.openExternal(`http://${serverAddress}/auth/login`);
+    // Same scheme rule as wsClient.js: bare host:port is local dev (http),
+    // a plain hostname is a hosted deployment behind TLS (https).
+    const scheme = serverAddress.includes('localhost') || /:\d+$/.test(serverAddress) ? 'http' : 'https';
+    shell.openExternal(`${scheme}://${serverAddress}/auth/login`);
   });
 
   ipcMain.handle('get-settings', () => ({
