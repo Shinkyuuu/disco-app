@@ -25,6 +25,9 @@ function broadcastToRenderers(channel, payload) {
   if (chatWindow) chatWindow.webContents.send(channel, payload);
 }
 
+const UNREACHABLE_THRESHOLD = 3;
+let consecutiveFailures = 0;
+
 function startWsClient() {
   const token = store.get('sessionToken');
   const serverAddress = store.get('serverAddress');
@@ -49,10 +52,20 @@ function startWsClient() {
     }
     broadcastToRenderers('transcript', event);
   });
-  wsClient.on('open', () => broadcastToRenderers('ws-connection-state', { status: 'connected' }));
-  wsClient.on('close', (code, reason) => {
-    broadcastToRenderers('ws-connection-state', { status: 'disconnected', code, reason });
+  wsClient.on('open', () => {
+    consecutiveFailures = 0;
+    broadcastToRenderers('ws-connection-state', { status: 'connected' });
+  });
+  wsClient.on('auth-failed', (reason) => {
+    broadcastToRenderers('ws-connection-state', { status: 'auth-failed', reason });
+    wsClient.close();
     wsClient = null;
+    store.delete('sessionToken');
+  });
+  wsClient.on('close', (code, reason) => {
+    consecutiveFailures += 1;
+    const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
+    broadcastToRenderers('ws-connection-state', { status, code, reason, serverAddress: store.get('serverAddress') });
   });
 }
 
@@ -185,6 +198,14 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('logout', () => logout());
+
+  ipcMain.handle('focus-launcher-settings', () => {
+    if (launcherWindow) {
+      if (launcherWindow.isMinimized()) launcherWindow.restore();
+      launcherWindow.focus();
+      launcherWindow.webContents.send('open-settings');
+    }
+  });
 }
 
 function rendererUrl(view) {
