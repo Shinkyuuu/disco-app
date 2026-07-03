@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+
+const MESSAGE_VISIBLE_MS = 5000;
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog from './MessageLog';
 import WindowMenu from './WindowMenu';
@@ -88,6 +90,17 @@ export default function ChatView() {
       setConnectionState(snapshot.connectionState);
     });
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
+  }, []);
+
+  // Chats are only visible for 5 seconds — periodically drop entries older
+  // than that. receivedAt is stamped once in the main process (index.js) so
+  // this stays correct across a close/reopen, not restarted from mount time.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const cutoff = Date.now() - MESSAGE_VISIBLE_MS;
+      setEntries((prev) => prev.filter((entry) => (entry.receivedAt ?? 0) >= cutoff));
+    }, 250);
+    return () => clearInterval(interval);
   }, []);
 
   if (connectionState.status === 'auth-failed' && connectionState.reason === 'not in voice channel') {
