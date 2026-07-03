@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog from './MessageLog';
+import { customAvatars } from './customAvatars';
 
 export default function ChatView() {
   const [roster, setRoster] = useState([]);
@@ -10,14 +11,31 @@ export default function ChatView() {
   const [settings, setSettings] = useState(null);
   const [connectionState, setConnectionState] = useState({ status: 'connected' });
 
+  // speakerId -> index into customAvatars, assigned in order of first appearance
+  // in the roster ("first N users that join get the N images"). Stable for the
+  // chat session; users beyond the image count fall back to their Discord avatar.
+  const avatarIndexBySpeaker = useRef(new Map());
+  function assignCustomAvatars(members) {
+    const assigned = avatarIndexBySpeaker.current;
+    for (const member of members) {
+      if (!assigned.has(member.speakerId) && assigned.size < customAvatars.length) {
+        assigned.set(member.speakerId, assigned.size);
+      }
+    }
+  }
+
   useEffect(() => {
     window.api.getSettings().then(setSettings);
     window.api.onConnectionState(setConnectionState);
     window.api.onStateSnapshot((snapshot) => {
+      assignCustomAvatars(snapshot.roster);
       setRoster(snapshot.roster);
       setEntries(snapshot.messageLog);
     });
-    window.api.onRoster(setRoster);
+    window.api.onRoster((members) => {
+      assignCustomAvatars(members);
+      setRoster(members);
+    });
     window.api.onSpeaking(({ speakerId, isSpeaking }) => {
       setSpeakingIds((prev) => {
         const next = new Set(prev);
@@ -75,7 +93,14 @@ export default function ChatView() {
 
   return (
     <div>
-      <SpeakerStrip roster={roster} speakingIds={speakingIds} avatarMode={settings?.avatarMode ?? 'discord'} />
+      <SpeakerStrip
+        roster={roster}
+        speakingIds={speakingIds}
+        avatarMode={settings?.avatarMode ?? 'discord'}
+        customAvatarBySpeaker={Object.fromEntries(
+          [...avatarIndexBySpeaker.current].map(([speakerId, i]) => [speakerId, customAvatars[i]]),
+        )}
+      />
       <MessageLog entries={entries} interimBySpeaker={interimBySpeaker} />
     </div>
   );
