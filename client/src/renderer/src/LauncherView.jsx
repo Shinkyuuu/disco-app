@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import WindowMenu from './WindowMenu';
+import TitleBar from './TitleBar';
 
 export default function LauncherView() {
   const [settings, setSettings] = useState(null);
@@ -40,8 +40,7 @@ export default function LauncherView() {
 
   return (
     <div className="launcher-root">
-      <div className="launcher-header">discord-echo</div>
-      <WindowMenu />
+      <TitleBar title="discord-echo" />
       <div className="launcher-content">
         {loginError && (
           <div role="alert">

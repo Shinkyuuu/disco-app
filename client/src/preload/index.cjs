@@ -27,4 +27,9 @@ contextBridge.exposeInMainWorld('api', {
   focusLauncherSettings: () => ipcRenderer.invoke('focus-launcher-settings'),
   onOpenSettings: subscribe('open-settings', (callback) => () => callback()),
   onConnectionState: subscribe('ws-connection-state', (callback) => (_e, state) => callback(state)),
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowToggleMaximize: () => ipcRenderer.invoke('window-toggle-maximize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  onWindowMaximizedChange: subscribe('window-maximized-change', (callback) => (_e, isMaximized) => callback(isMaximized)),
 });

@@ -127,15 +127,51 @@ select {
   flex-direction: column;
 }
 
-.launcher-header {
-  height: 34px;
+/* --- title bar (VS Code-style custom chrome for the launcher window) --- */
+.title-bar {
+  height: 32px;
   flex: none;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  justify-content: space-between;
+  padding-left: 12px;
   font-size: 13px;
   font-weight: 600;
+  background: #17181c;
   -webkit-app-region: drag; /* frameless window — this bar is the drag handle */
+}
+
+.title-bar-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title-bar-controls {
+  display: flex;
+  align-self: stretch;
+  -webkit-app-region: no-drag; /* buttons must be clickable, not part of the drag region */
+}
+
+.title-bar-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  color: inherit;
+}
+
+.title-bar-button:hover {
+  background: #3a3b42;
+}
+
+.title-bar-button--close:hover {
+  background: #e81123;
+  color: #ffffff;
 }
 
 .launcher-content {
