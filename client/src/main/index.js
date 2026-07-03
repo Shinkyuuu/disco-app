@@ -253,6 +253,28 @@ function registerIpcHandlers() {
       launcherWindow.webContents.send('open-settings');
     }
   });
+
+  // Generic window-chrome controls for the custom (frame: false) title bar —
+  // targets whichever window's renderer invoked them, not a hardcoded window,
+  // so the same preload API works for any frameless window.
+  ipcMain.handle('window-minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+
+  ipcMain.handle('window-toggle-maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+  });
+
+  ipcMain.handle('window-close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+
+  ipcMain.handle('window-is-maximized', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  });
 }
 
 function rendererUrl(view) {
@@ -282,6 +304,8 @@ function createLauncherWindow() {
       pendingAuthError = null;
     }
   });
+  launcherWindow.on('maximize', () => launcherWindow.webContents.send('window-maximized-change', true));
+  launcherWindow.on('unmaximize', () => launcherWindow.webContents.send('window-maximized-change', false));
   launcherWindow.on('closed', () => {
     launcherWindow = null;
   });
