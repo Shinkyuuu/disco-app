@@ -41,13 +41,10 @@ export default function ChatView() {
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
+    // Pull the snapshot after the live subscriptions below are registered, so
+    // nothing falls between the snapshot and the event stream.
     const unsubscribes = [
       window.api.onConnectionState(setConnectionState),
-      window.api.onStateSnapshot((snapshot) => {
-        assignCustomAvatars(snapshot.roster);
-        setRoster(snapshot.roster);
-        setEntries(snapshot.messageLog);
-      }),
       window.api.onRoster((members) => {
         assignCustomAvatars(members);
         setRoster(members);
@@ -73,6 +70,12 @@ export default function ChatView() {
         }
       }),
     ];
+    window.api.getStateSnapshot().then((snapshot) => {
+      assignCustomAvatars(snapshot.roster);
+      setRoster(snapshot.roster);
+      setEntries(snapshot.messageLog);
+      setConnectionState(snapshot.connectionState);
+    });
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
