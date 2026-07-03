@@ -7,18 +7,21 @@ export default function LauncherView() {
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
-    window.api.onAuthToken(() => {
-      window.api.getSettings().then(setSettings);
-      setLoginError(null);
-    });
-    window.api.onAuthError((reason) => {
-      setLoginError(
-        reason === 'access_denied'
-          ? 'Login was cancelled.'
-          : 'Login failed — please try again.',
-      );
-    });
-    window.api.onOpenSettings(() => setShowSettings(true));
+    const unsubscribes = [
+      window.api.onAuthToken(() => {
+        window.api.getSettings().then(setSettings);
+        setLoginError(null);
+      }),
+      window.api.onAuthError((reason) => {
+        setLoginError(
+          reason === 'access_denied'
+            ? 'Login was cancelled.'
+            : 'Login failed — please try again.',
+        );
+      }),
+      window.api.onOpenSettings(() => setShowSettings(true)),
+    ];
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   if (!settings) return null;

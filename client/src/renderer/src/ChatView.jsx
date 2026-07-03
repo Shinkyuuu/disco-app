@@ -26,36 +26,39 @@ export default function ChatView() {
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
-    window.api.onConnectionState(setConnectionState);
-    window.api.onStateSnapshot((snapshot) => {
-      assignCustomAvatars(snapshot.roster);
-      setRoster(snapshot.roster);
-      setEntries(snapshot.messageLog);
-    });
-    window.api.onRoster((members) => {
-      assignCustomAvatars(members);
-      setRoster(members);
-    });
-    window.api.onSpeaking(({ speakerId, isSpeaking }) => {
-      setSpeakingIds((prev) => {
-        const next = new Set(prev);
-        if (isSpeaking) next.add(speakerId);
-        else next.delete(speakerId);
-        return next;
-      });
-    });
-    window.api.onTranscript((event) => {
-      if (event.isFinal) {
-        setEntries((prev) => [...prev, event]);
-        setInterimBySpeaker((prev) => {
-          const next = { ...prev };
-          delete next[event.speakerId];
+    const unsubscribes = [
+      window.api.onConnectionState(setConnectionState),
+      window.api.onStateSnapshot((snapshot) => {
+        assignCustomAvatars(snapshot.roster);
+        setRoster(snapshot.roster);
+        setEntries(snapshot.messageLog);
+      }),
+      window.api.onRoster((members) => {
+        assignCustomAvatars(members);
+        setRoster(members);
+      }),
+      window.api.onSpeaking(({ speakerId, isSpeaking }) => {
+        setSpeakingIds((prev) => {
+          const next = new Set(prev);
+          if (isSpeaking) next.add(speakerId);
+          else next.delete(speakerId);
           return next;
         });
-      } else {
-        setInterimBySpeaker((prev) => ({ ...prev, [event.speakerId]: event }));
-      }
-    });
+      }),
+      window.api.onTranscript((event) => {
+        if (event.isFinal) {
+          setEntries((prev) => [...prev, event]);
+          setInterimBySpeaker((prev) => {
+            const next = { ...prev };
+            delete next[event.speakerId];
+            return next;
+          });
+        } else {
+          setInterimBySpeaker((prev) => ({ ...prev, [event.speakerId]: event }));
+        }
+      }),
+    ];
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   if (connectionState.status === 'auth-failed' && connectionState.reason === 'not in voice channel') {

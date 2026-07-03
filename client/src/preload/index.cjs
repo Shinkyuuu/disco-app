@@ -1,22 +1,30 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Every on* subscription returns an unsubscribe function. Without it, a React
+// effect re-run (StrictMode's dev double-mount, or any real remount) stacks a
+// second listener and non-idempotent handlers — like appending a transcript
+// line — fire once per stacked listener.
+function subscribe(channel, wrap) {
+  return (callback) => {
+    const listener = wrap(callback);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  };
+}
+
 contextBridge.exposeInMainWorld('api', {
-  onAuthToken: (callback) => {
-    ipcRenderer.on('auth-token', (_event, token) => callback(token));
-  },
-  onAuthError: (callback) => {
-    ipcRenderer.on('auth-error', (_event, reason) => callback(reason));
-  },
+  onAuthToken: subscribe('auth-token', (callback) => (_event, token) => callback(token)),
+  onAuthError: subscribe('auth-error', (callback) => (_event, reason) => callback(reason)),
   openLogin: (serverAddress) => ipcRenderer.invoke('open-login', serverAddress),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (partial) => ipcRenderer.invoke('set-settings', partial),
   startChatWindow: () => ipcRenderer.invoke('start-chat-window'),
   logout: () => ipcRenderer.invoke('logout'),
-  onStateSnapshot: (callback) => ipcRenderer.on('state-snapshot', (_e, snapshot) => callback(snapshot)),
-  onRoster: (callback) => ipcRenderer.on('roster', (_e, members) => callback(members)),
-  onSpeaking: (callback) => ipcRenderer.on('speaking', (_e, event) => callback(event)),
-  onTranscript: (callback) => ipcRenderer.on('transcript', (_e, event) => callback(event)),
+  onStateSnapshot: subscribe('state-snapshot', (callback) => (_e, snapshot) => callback(snapshot)),
+  onRoster: subscribe('roster', (callback) => (_e, members) => callback(members)),
+  onSpeaking: subscribe('speaking', (callback) => (_e, event) => callback(event)),
+  onTranscript: subscribe('transcript', (callback) => (_e, event) => callback(event)),
   focusLauncherSettings: () => ipcRenderer.invoke('focus-launcher-settings'),
-  onOpenSettings: (callback) => ipcRenderer.on('open-settings', () => callback()),
-  onConnectionState: (callback) => ipcRenderer.on('ws-connection-state', (_e, state) => callback(state)),
+  onOpenSettings: subscribe('open-settings', (callback) => () => callback()),
+  onConnectionState: subscribe('ws-connection-state', (callback) => (_e, state) => callback(state)),
 });
