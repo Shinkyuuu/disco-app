@@ -12,4 +12,8 @@ contextBridge.exposeInMainWorld('api', {
   setSettings: (partial) => ipcRenderer.invoke('set-settings', partial),
   startChatWindow: () => ipcRenderer.invoke('start-chat-window'),
   logout: () => ipcRenderer.invoke('logout'),
+  onStateSnapshot: (callback) => ipcRenderer.on('state-snapshot', (_e, snapshot) => callback(snapshot)),
+  onRoster: (callback) => ipcRenderer.on('roster', (_e, members) => callback(members)),
+  onSpeaking: (callback) => ipcRenderer.on('speaking', (_e, event) => callback(event)),
+  onTranscript: (callback) => ipcRenderer.on('transcript', (_e, event) => callback(event)),
 });
