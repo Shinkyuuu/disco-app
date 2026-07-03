@@ -1,7 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError } from './protocolUrl.js';
+import { store } from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'discord-echo';
@@ -22,6 +23,7 @@ if (process.defaultApp) {
 }
 
 function deliverAuthToken(token) {
+  store.set('sessionToken', token);
   if (launcherWindow) {
     launcherWindow.webContents.send('auth-token', token);
   } else {
@@ -72,8 +74,27 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    registerIpcHandlers();
     createLauncherWindow();
     if (deferredOpenUrl) handleDeepLink(deferredOpenUrl);
+  });
+}
+
+function registerIpcHandlers() {
+  ipcMain.handle('open-login', (_event, serverAddress) => {
+    shell.openExternal(`http://${serverAddress}/auth/login`);
+  });
+
+  ipcMain.handle('get-settings', () => ({
+    serverAddress: store.get('serverAddress'),
+    avatarMode: store.get('avatarMode'),
+    hasSessionToken: Boolean(store.get('sessionToken')),
+  }));
+
+  ipcMain.handle('set-settings', (_event, partial) => {
+    for (const [key, value] of Object.entries(partial)) {
+      store.set(key, value);
+    }
   });
 }
 
@@ -87,7 +108,7 @@ function createLauncherWindow() {
     width: 360,
     height: 480,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/index.js'),
+      preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
