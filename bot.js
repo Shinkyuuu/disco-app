@@ -16,7 +16,7 @@ import {
 } from '@discordjs/voice';
 import prism from 'prism-media';
 import WebSocket from 'ws';
-import { broadcastTranscript, PORT_NUMBER } from './gateway.js';
+import { broadcast, PORT_NUMBER } from './gateway.js';
 
 const { DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DISCORD_SERVER_ID, DEEPGRAM_API_KEY } = process.env;
 
@@ -98,7 +98,8 @@ async function startTranscribing(guildId, connection, userId) {
     const transcript = msg.channel?.alternatives?.[0]?.transcript;
     if (!transcript) return;
     console.log(`[${speaker.username}] ${msg.is_final ? 'final' : 'interim'}: ${transcript}`);
-    broadcastTranscript({
+    broadcast({
+      type: 'transcript',
       speakerId: userId,
       username: speaker.username,
       avatarURL: speaker.avatarURL,
