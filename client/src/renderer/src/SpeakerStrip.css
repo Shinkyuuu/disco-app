@@ -1,27 +1,26 @@
 .speaker-strip {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
 }
 
 .speaker-icon {
-  border-radius: 50%;
+  width: auto; /* keep the source aspect ratio — never force a square */
   transform: translateY(0) scale(1);
   transition: transform 150ms ease-out, filter 150ms ease-out;
 }
 
 .speaker-icon--discord {
-  margin-top: -12px; /* floats above the window's top edge */
+  height: 48px;
+  border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
+  margin-bottom: 6px; /* floats just above the chat panel's top edge */
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
-  opacity: 1;
-  z-index: 1; /* explicit — renders in front of window content, the opposite of custom-image mode's z-index: -1 (Task 21) */
-  position: relative; /* z-index has no effect without a positioning context; this establishes one without affecting layout */
 }
 
 .speaker-icon--custom {
-  margin-top: 0; /* no gap — clipped by the window's top edge */
-  border-radius: 0; /* character art, not a round avatar — don't clip its corners */
-  z-index: -1; /* renders behind the window content */
-  position: relative; /* z-index needs a positioning context, same as --discord */
+  height: 88px;
+  border-radius: 0; /* character art, not a round avatar — don't clip it */
+  margin-bottom: -14px; /* bottom overlaps behind the chat panel (higher z-index) — "peeking out" */
 }
 
 .speaker-icon--speaking {

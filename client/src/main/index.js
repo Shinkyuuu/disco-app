@@ -76,7 +76,11 @@ function createChatWindow() {
   }
   chatWindow = new BrowserWindow({
     width: 480,
-    height: 360,
+    height: 420,
+    frame: false,
+    // Transparent so the header strip above the chat panel is invisible —
+    // speaker avatars render there and appear to float above the window.
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -220,6 +224,7 @@ function createLauncherWindow() {
   launcherWindow = new BrowserWindow({
     width: 360,
     height: 480,
+    frame: false, // no OS title/menu bar — the renderer draws its own header + menu
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
