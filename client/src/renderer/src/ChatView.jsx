@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog from './MessageLog';
+import WindowMenu from './WindowMenu';
 import { customAvatars } from './customAvatars';
+
+// Shared frame: invisible header strip (avatars float here, and it drags the
+// frameless window) above the opaque chat panel with the window menu.
+function ChatFrame({ header = null, panelClass = '', children }) {
+  return (
+    <div className="chat-root">
+      <div className="chat-header">{header}</div>
+      <div className={`chat-panel ${panelClass}`.trim()}>
+        <WindowMenu />
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function ChatView() {
   const [roster, setRoster] = useState([]);
@@ -63,15 +78,15 @@ export default function ChatView() {
 
   if (connectionState.status === 'auth-failed' && connectionState.reason === 'not in voice channel') {
     return (
-      <div>
+      <ChatFrame panelClass="chat-panel--message">
         <p>You need to be in the voice channel being captioned.</p>
         <button onClick={() => window.api.startChatWindow()}>Retry</button>
-      </div>
+      </ChatFrame>
     );
   }
   if (connectionState.status === 'auth-failed') {
     return (
-      <div>
+      <ChatFrame panelClass="chat-panel--message">
         <p>Your session expired — please log in again.</p>
         <button
           disabled={!settings}
@@ -79,32 +94,39 @@ export default function ChatView() {
         >
           Log in
         </button>
-      </div>
+      </ChatFrame>
     );
   }
   if (connectionState.status === 'unreachable') {
     return (
-      <div>
+      <ChatFrame panelClass="chat-panel--message">
         <p>Can't reach {connectionState.serverAddress} — still retrying in the background.</p>
         <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
-      </div>
+      </ChatFrame>
     );
   }
   if (connectionState.status === 'reconnecting') {
-    return <p>Reconnecting…</p>;
+    return (
+      <ChatFrame panelClass="chat-panel--message">
+        <p>Reconnecting…</p>
+      </ChatFrame>
+    );
   }
 
   return (
-    <div>
-      <SpeakerStrip
-        roster={roster}
-        speakingIds={speakingIds}
-        avatarMode={settings?.avatarMode ?? 'discord'}
-        customAvatarBySpeaker={Object.fromEntries(
-          [...avatarIndexBySpeaker.current].map(([speakerId, i]) => [speakerId, customAvatars[i]]),
-        )}
-      />
+    <ChatFrame
+      header={
+        <SpeakerStrip
+          roster={roster}
+          speakingIds={speakingIds}
+          avatarMode={settings?.avatarMode ?? 'discord'}
+          customAvatarBySpeaker={Object.fromEntries(
+            [...avatarIndexBySpeaker.current].map(([speakerId, i]) => [speakerId, customAvatars[i]]),
+          )}
+        />
+      }
+    >
       <MessageLog entries={entries} interimBySpeaker={interimBySpeaker} />
-    </div>
+    </ChatFrame>
   );
 }
