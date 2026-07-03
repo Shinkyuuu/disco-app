@@ -70,15 +70,21 @@ function startWsClient() {
   wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
   wsClient.on('transcript', (event) => {
     if (event.isFinal) {
-      messageLog.push(event);
+      // receivedAt drives the renderer's 5-second disappearing-chat timer —
+      // stamped once here so live push and a later state-snapshot pull agree
+      // on the same value (not a fresh Date.now() each time it's read).
+      const finalized = { ...event, receivedAt: Date.now() };
+      messageLog.push(finalized);
       // Bound the array a very long session's worth of finalized lines could otherwise grow
       // to unboundedly — this is what gets structured-clone'd over IPC on every chat-window
       // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
       // 1000 lines is far more scrollback than this product's use case (a live
       // conversation, not an archive) ever needs to show on reopen.
       if (messageLog.length > 1000) messageLog.shift();
+      broadcastToRenderers('transcript', finalized);
+    } else {
+      broadcastToRenderers('transcript', event);
     }
-    broadcastToRenderers('transcript', event);
   });
   wsClient.on('open', () => {
     consecutiveFailures = 0;
