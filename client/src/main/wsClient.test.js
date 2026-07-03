@@ -37,3 +37,30 @@ test('emits close with the server-provided code and reason', async () => {
 
   wss.close();
 });
+
+test('emits auth-failed (not close-and-reconnect) for auth-specific close codes', async () => {
+  const { wss, port } = await startFakeGateway((ws) => ws.close(4001, 'not in voice channel'));
+  const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok' });
+  const reason = await new Promise((resolve) => client.on('auth-failed', resolve));
+  assert.equal(reason, 'not in voice channel');
+  wss.close();
+});
+
+test('reconnects automatically after a non-auth close', async () => {
+  let connectionCount = 0;
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type === 'auth') {
+      connectionCount += 1;
+      // Simulate a network blip, not an auth failure: terminate() drops the TCP
+      // connection without a close frame, so the client observes code 1006.
+      // (1006 is reserved and can't be passed to ws.close() directly.)
+      if (connectionCount === 1) ws.terminate();
+      else ws.send(JSON.stringify({ type: 'roster', members: [] }));
+    }
+  });
+  const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok', reconnectBaseDelayMs: 10 });
+  await new Promise((resolve) => client.on('roster', resolve)); // only fires after the 2nd connection succeeds
+  assert.ok(connectionCount >= 2);
+  client.close();
+  wss.close();
+});
