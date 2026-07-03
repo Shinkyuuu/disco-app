@@ -198,7 +198,8 @@ async function handleCaptionsStart(interaction) {
     broadcast({ type: 'speaking', speakerId: userId, isSpeaking: true });
     startTranscribing(channel.guild.id, connection, userId);
   });
-  connection.receiver.speaking.on('stop', (userId) => {
+  // SpeakingMap emits 'end' (not 'stop') ~100ms after a user's last audio packet.
+  connection.receiver.speaking.on('end', (userId) => {
     broadcast({ type: 'speaking', speakerId: userId, isSpeaking: false });
   });
 }
