@@ -28,10 +28,26 @@ function broadcastToRenderers(channel, payload) {
 const UNREACHABLE_THRESHOLD = 3;
 let consecutiveFailures = 0;
 
+// Last-known connection state, included in the pull snapshot so a chat window
+// that opens (or re-opens) after a transient event still learns the truth —
+// push events alone are lost if they fire before the renderer subscribes.
+let lastConnectionState = { status: 'connected' };
+
+function setConnectionState(state) {
+  lastConnectionState = state;
+  broadcastToRenderers('ws-connection-state', state);
+}
+
 function startWsClient() {
+  if (wsClient) return;
   const token = store.get('sessionToken');
   const serverAddress = store.get('serverAddress');
-  if (!token || wsClient) return;
+  if (!token) {
+    // A stale token gets deleted on auth-failure; surface that as the
+    // session-expired screen instead of silently opening a dead window.
+    setConnectionState({ status: 'auth-failed', reason: 'no session' });
+    return;
+  }
 
   wsClient = createWsClient({ serverAddress, token });
 
@@ -54,10 +70,10 @@ function startWsClient() {
   });
   wsClient.on('open', () => {
     consecutiveFailures = 0;
-    broadcastToRenderers('ws-connection-state', { status: 'connected' });
+    setConnectionState({ status: 'connected' });
   });
   wsClient.on('auth-failed', (reason) => {
-    broadcastToRenderers('ws-connection-state', { status: 'auth-failed', reason });
+    setConnectionState({ status: 'auth-failed', reason });
     wsClient.close();
     wsClient = null;
     store.delete('sessionToken');
@@ -65,7 +81,7 @@ function startWsClient() {
   wsClient.on('close', (code, reason) => {
     consecutiveFailures += 1;
     const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
-    broadcastToRenderers('ws-connection-state', { status, code, reason, serverAddress: store.get('serverAddress') });
+    setConnectionState({ status, code, reason, serverAddress: store.get('serverAddress') });
   });
 }
 
@@ -88,9 +104,6 @@ function createChatWindow() {
     },
   });
   chatWindow.loadURL(rendererUrl('chat'));
-  chatWindow.on('ready-to-show', () => {
-    chatWindow.webContents.send('state-snapshot', { roster: currentRoster, messageLog });
-  });
   chatWindow.on('closed', () => {
     chatWindow = null;
     if (launcherWindow) launcherWindow.restore();
@@ -105,7 +118,7 @@ function logout() {
   currentRoster = [];
   store.delete('sessionToken');
   if (chatWindow) chatWindow.close();
-  broadcastToRenderers('ws-connection-state', { status: 'logged-out' });
+  setConnectionState({ status: 'logged-out' });
 }
 
 app.on('before-quit', () => {
@@ -203,6 +216,14 @@ function registerIpcHandlers() {
     startWsClient();
     createChatWindow();
   });
+
+  // Pulled by the chat window once its listeners are mounted — a pushed
+  // snapshot can fire before the renderer subscribes and be lost.
+  ipcMain.handle('get-state-snapshot', () => ({
+    roster: currentRoster,
+    messageLog,
+    connectionState: lastConnectionState,
+  }));
 
   ipcMain.handle('logout', () => logout());
 
