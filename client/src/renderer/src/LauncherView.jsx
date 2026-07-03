@@ -18,6 +18,7 @@ export default function LauncherView() {
           : 'Login failed — please try again.',
       );
     });
+    window.api.onOpenSettings(() => setShowSettings(true));
   }, []);
 
   if (!settings) return null;
@@ -25,7 +26,9 @@ export default function LauncherView() {
   function handleStartChatWindow() {
     if (!settings.hasSessionToken) {
       setLoginError(null);
-      window.api.openLogin(settings.serverAddress).catch(() => setLoginError('Could not open the login page.'));
+      window.api.openLogin(settings.serverAddress).catch(() =>
+        setLoginError('Could not reach the login page — check the server address in Settings and try again.'),
+      );
       return;
     }
     window.api.startChatWindow();
@@ -42,6 +45,11 @@ export default function LauncherView() {
       )}
       <button onClick={() => setShowSettings((s) => !s)}>Settings</button>
       <button onClick={handleStartChatWindow}>Start Chat Window</button>
+      {settings.hasSessionToken && (
+        <button onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}>
+          Log out
+        </button>
+      )}
       {showSettings && (
         <div>
           <label>
