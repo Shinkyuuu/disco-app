@@ -1,4 +1,6 @@
-export default function SpeakerStrip({ roster, speakingIds }) {
+import './SpeakerStrip.css';
+
+export default function SpeakerStrip({ roster, speakingIds, avatarMode }) {
   return (
     <div className="speaker-strip">
       {roster.map((member) => (
@@ -8,7 +10,11 @@ export default function SpeakerStrip({ roster, speakingIds }) {
           alt={member.username}
           width={48}
           height={48}
-          className={speakingIds.has(member.speakerId) ? 'speaker-icon speaker-icon--speaking' : 'speaker-icon'}
+          className={[
+            'speaker-icon',
+            avatarMode === 'discord' ? 'speaker-icon--discord' : 'speaker-icon--custom',
+            speakingIds.has(member.speakerId) ? 'speaker-icon--speaking' : '',
+          ].filter(Boolean).join(' ')}
         />
       ))}
     </div>
