@@ -59,6 +59,19 @@ async function resolveSpeaker(guildId, userId) {
 // key: `${guildId}:${userId}` -> { opusStream, dgSocket } | null (reserved while resolving speaker)
 const activeStreams = new Map();
 
+let trackedChannel = null; // { guildId, channelId } | null — single global session
+let roster = []; // [{ speakerId, username, avatarURL }]
+
+export function isUserInTrackedChannel(userId) {
+  if (!trackedChannel) return false;
+  const guild = client.guilds.cache.get(trackedChannel.guildId);
+  return guild?.members.cache.get(userId)?.voice.channelId === trackedChannel.channelId;
+}
+
+export function getRoster() {
+  return roster;
+}
+
 async function startTranscribing(guildId, connection, userId) {
   const key = `${guildId}:${userId}`;
   if (activeStreams.has(key)) return;
@@ -156,6 +169,8 @@ async function handleCaptionsStart(interaction) {
 
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
+  trackedChannel = { guildId: channel.guild.id, channelId: channel.id };
+
   connection.receiver.speaking.on('start', (userId) => {
     startTranscribing(channel.guild.id, connection, userId);
   });
@@ -169,6 +184,8 @@ async function handleCaptionsStop(interaction) {
   }
 
   stopTranscribing(interaction.guild.id);
+  trackedChannel = null;
+  roster = [];
   connection.destroy();
   await interaction.reply('Captions stopped, left the voice channel.');
 }
