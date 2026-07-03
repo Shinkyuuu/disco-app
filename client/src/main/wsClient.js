@@ -11,7 +11,10 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
   let socket = null;
 
   function connect() {
-    socket = new WebSocket(`ws://${serverAddress}/`);
+    // Bare host:port (local dev) → plaintext ws; hostname without a port (hosted,
+    // behind TLS) → wss. Matches the openLogin http/https rule in index.js.
+    const scheme = serverAddress.includes('localhost') || /:\d+$/.test(serverAddress) ? 'ws' : 'wss';
+    socket = new WebSocket(`${scheme}://${serverAddress}/`);
 
     socket.on('open', () => {
       socket.send(JSON.stringify({ type: 'auth', token }));
