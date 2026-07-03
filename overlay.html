@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>discord-echo overlay</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: transparent;
+    }
+    .caption-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+    .caption-line.fading {
+      opacity: 0;
+    }
+    .caption-line img {
+      border-radius: 50%;
+    }
+    .caption-line .text.interim {
+      opacity: 0.6;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div id="captions"></div>
+  <script>
+    const FADE_AFTER_MS = 3000;
+    const FADE_TRANSITION_MS = 500;
+
+    const captions = document.getElementById('captions');
+    const lines = new Map(); // speakerId -> { el, textEl, fadeTimer, removeTimer }
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    ws.onmessage = (event) => {
+      const { speakerId, username, avatarURL, text, isFinal } = JSON.parse(event.data);
+
+      let line = lines.get(speakerId);
+      if (!line) {
+        const el = document.createElement('div');
+        el.className = 'caption-line';
+
+        const avatar = document.createElement('img');
+        avatar.src = avatarURL;
+        avatar.width = 24;
+        avatar.height = 24;
+
+        const nameEl = document.createElement('strong');
+        nameEl.textContent = username;
+
+        const textEl = document.createElement('span');
+        textEl.className = 'text';
+
+        el.append(avatar, nameEl, textEl);
+        captions.appendChild(el);
+
+        line = { el, textEl, fadeTimer: null, removeTimer: null };
+        lines.set(speakerId, line);
+      }
+
+      clearTimeout(line.fadeTimer);
+      clearTimeout(line.removeTimer);
+      line.el.classList.remove('fading');
+      line.textEl.textContent = ` ${text}`;
+      line.textEl.classList.toggle('interim', !isFinal);
+
+      line.fadeTimer = setTimeout(() => {
+        line.el.classList.add('fading');
+        line.removeTimer = setTimeout(() => {
+          line.el.remove();
+          lines.delete(speakerId);
+        }, FADE_TRANSITION_MS);
+      }, FADE_AFTER_MS);
+    };
+  </script>
+</body>
+</html>
