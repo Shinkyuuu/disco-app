@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import fs from 'node:fs';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, verifySessionToken } from './auth.js';
@@ -8,14 +7,12 @@ import { isUserInTrackedChannel, getRoster } from './bot.js';
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
 
-const OVERLAY_HTML = fs.readFileSync('overlay.html');
-
 export const httpServer = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === '/auth/login') return handleAuthLogin(req, res);
   if (url.pathname === '/auth/callback') return handleAuthCallback(req, res);
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end(OVERLAY_HTML);
+  res.writeHead(404, { 'Content-Type': 'text/plain' });
+  res.end('Not found — use the discord-echo Electron client to view captions.');
 });
 
 const gatewayClients = new Set();
