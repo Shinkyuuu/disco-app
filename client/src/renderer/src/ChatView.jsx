@@ -7,8 +7,10 @@ export default function ChatView() {
   const [speakingIds, setSpeakingIds] = useState(new Set());
   const [entries, setEntries] = useState([]);
   const [interimBySpeaker, setInterimBySpeaker] = useState({});
+  const [settings, setSettings] = useState(null);
 
   useEffect(() => {
+    window.api.getSettings().then(setSettings);
     window.api.onStateSnapshot((snapshot) => {
       setRoster(snapshot.roster);
       setEntries(snapshot.messageLog);
@@ -38,7 +40,7 @@ export default function ChatView() {
 
   return (
     <div>
-      <SpeakerStrip roster={roster} speakingIds={speakingIds} />
+      <SpeakerStrip roster={roster} speakingIds={speakingIds} avatarMode={settings?.avatarMode ?? 'discord'} />
       <MessageLog entries={entries} interimBySpeaker={interimBySpeaker} />
     </div>
   );
