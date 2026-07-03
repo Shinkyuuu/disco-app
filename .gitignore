@@ -1,5 +1,7 @@
 .env
 node_modules
+recordings/
 docs/
 .claude
 CLAUDE.md
+.superpowers/
