@@ -28,7 +28,7 @@ export default function LauncherView() {
       window.api.openLogin(settings.serverAddress).catch(() => setLoginError('Could not open the login page.'));
       return;
     }
-    // Chat window creation is wired in Task 17.
+    window.api.startChatWindow();
   }
 
   return (

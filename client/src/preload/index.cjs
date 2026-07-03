@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('api', {
   openLogin: (serverAddress) => ipcRenderer.invoke('open-login', serverAddress),
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (partial) => ipcRenderer.invoke('set-settings', partial),
+  startChatWindow: () => ipcRenderer.invoke('start-chat-window'),
+  logout: () => ipcRenderer.invoke('logout'),
 });
