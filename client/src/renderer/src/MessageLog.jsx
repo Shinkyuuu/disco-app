@@ -4,14 +4,14 @@ export default function MessageLog({ entries, interimBySpeaker }) {
     <div className="message-log">
       {entries.map((entry, i) => (
         <div key={i} className="message-line">
-          <img src={entry.avatarURL} alt="" width={24} height={24} />
+          <img src={entry.avatarURL} alt="" />
           <strong>{entry.username}</strong>
           <span>{entry.text}</span>
         </div>
       ))}
       {interimEntries.map((entry) => (
         <div key={entry.speakerId} className="message-line message-line--interim">
-          <img src={entry.avatarURL} alt="" width={24} height={24} />
+          <img src={entry.avatarURL} alt="" />
           <strong>{entry.username}</strong>
           <span>{entry.text}</span>
         </div>

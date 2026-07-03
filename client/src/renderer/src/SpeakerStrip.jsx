@@ -12,8 +12,6 @@ export default function SpeakerStrip({ roster, speakingIds, avatarMode, customAv
               : customAvatarBySpeaker[member.speakerId] ?? member.avatarURL
           }
           alt={member.username}
-          width={48}
-          height={48}
           className={[
             'speaker-icon',
             avatarMode === 'discord' ? 'speaker-icon--discord' : 'speaker-icon--custom',

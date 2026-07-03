@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import WindowMenu from './WindowMenu';
 
 export default function LauncherView() {
   const [settings, setSettings] = useState(null);
@@ -38,47 +39,50 @@ export default function LauncherView() {
   }
 
   return (
-    <div>
-      <h1>discord-echo</h1>
-      {loginError && (
-        <div role="alert">
-          <p>{loginError}</p>
-          <button onClick={handleStartChatWindow}>Retry</button>
-        </div>
-      )}
-      <button onClick={() => setShowSettings((s) => !s)}>Settings</button>
-      <button onClick={handleStartChatWindow}>Start Chat Window</button>
-      {settings.hasSessionToken && (
-        <button onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}>
-          Log out
-        </button>
-      )}
-      {showSettings && (
-        <div>
-          <label>
-            Server address
-            <input
-              value={settings.serverAddress}
-              onChange={(e) => setSettings((s) => ({ ...s, serverAddress: e.target.value }))}
-              onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
-            />
-          </label>
-          <label>
-            Avatar mode
-            <select
-              value={settings.avatarMode}
-              onChange={(e) => {
-                const avatarMode = e.target.value;
-                setSettings((s) => ({ ...s, avatarMode }));
-                window.api.setSettings({ avatarMode });
-              }}
-            >
-              <option value="discord">Discord avatar</option>
-              <option value="custom">Custom image</option>
-            </select>
-          </label>
-        </div>
-      )}
+    <div className="launcher-root">
+      <div className="launcher-header">discord-echo</div>
+      <WindowMenu />
+      <div className="launcher-content">
+        {loginError && (
+          <div role="alert">
+            <p>{loginError}</p>
+            <button onClick={handleStartChatWindow}>Retry</button>
+          </div>
+        )}
+        <button onClick={() => setShowSettings((s) => !s)}>Settings</button>
+        <button onClick={handleStartChatWindow}>Start Chat Window</button>
+        {settings.hasSessionToken && (
+          <button onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}>
+            Log out
+          </button>
+        )}
+        {showSettings && (
+          <div>
+            <label>
+              Server address
+              <input
+                value={settings.serverAddress}
+                onChange={(e) => setSettings((s) => ({ ...s, serverAddress: e.target.value }))}
+                onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
+              />
+            </label>
+            <label>
+              Avatar mode
+              <select
+                value={settings.avatarMode}
+                onChange={(e) => {
+                  const avatarMode = e.target.value;
+                  setSettings((s) => ({ ...s, avatarMode }));
+                  window.api.setSettings({ avatarMode });
+                }}
+              >
+                <option value="discord">Discord avatar</option>
+                <option value="custom">Custom image</option>
+              </select>
+            </label>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
