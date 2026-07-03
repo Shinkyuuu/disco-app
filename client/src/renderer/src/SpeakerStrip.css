@@ -17,6 +17,13 @@
   position: relative; /* z-index has no effect without a positioning context; this establishes one without affecting layout */
 }
 
+.speaker-icon--custom {
+  margin-top: 0; /* no gap — clipped by the window's top edge */
+  border-radius: 0; /* character art, not a round avatar — don't clip its corners */
+  z-index: -1; /* renders behind the window content */
+  position: relative; /* z-index needs a positioning context, same as --discord */
+}
+
 .speaker-icon--speaking {
   transform: translateY(-4px) scale(1.08);
   filter: drop-shadow(0 6px 8px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(88, 166, 255, 0.8));
