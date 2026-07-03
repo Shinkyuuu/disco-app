@@ -18,4 +18,5 @@ contextBridge.exposeInMainWorld('api', {
   onTranscript: (callback) => ipcRenderer.on('transcript', (_e, event) => callback(event)),
   focusLauncherSettings: () => ipcRenderer.invoke('focus-launcher-settings'),
   onOpenSettings: (callback) => ipcRenderer.on('open-settings', () => callback()),
+  onConnectionState: (callback) => ipcRenderer.on('ws-connection-state', (_e, state) => callback(state)),
 });
