@@ -72,6 +72,16 @@ export function getRoster() {
   return roster;
 }
 
+function buildRoster(channel) {
+  return channel.members.map((member) => ({
+    speakerId: member.id,
+    username: member.displayName,
+    avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
+  }));
+}
+
+let voiceStateListener = null;
+
 async function startTranscribing(guildId, connection, userId) {
   const key = `${guildId}:${userId}`;
   if (activeStreams.has(key)) return;
@@ -171,8 +181,25 @@ async function handleCaptionsStart(interaction) {
 
   trackedChannel = { guildId: channel.guild.id, channelId: channel.id };
 
+  roster = buildRoster(channel);
+  broadcast({ type: 'roster', members: roster });
+
+  voiceStateListener = (oldState, newState) => {
+    if (oldState.channelId === newState.channelId) return; // mute/deafen/etc — no membership change, skip the rebuild
+    if (oldState.channelId !== trackedChannel.channelId && newState.channelId !== trackedChannel.channelId) return;
+    const trackedChannelObj = client.channels.cache.get(trackedChannel.channelId);
+    if (!trackedChannelObj) return;
+    roster = buildRoster(trackedChannelObj);
+    broadcast({ type: 'roster', members: roster });
+  };
+  client.on(Events.VoiceStateUpdate, voiceStateListener);
+
   connection.receiver.speaking.on('start', (userId) => {
+    broadcast({ type: 'speaking', speakerId: userId, isSpeaking: true });
     startTranscribing(channel.guild.id, connection, userId);
+  });
+  connection.receiver.speaking.on('stop', (userId) => {
+    broadcast({ type: 'speaking', speakerId: userId, isSpeaking: false });
   });
 }
 
@@ -186,6 +213,10 @@ async function handleCaptionsStop(interaction) {
   stopTranscribing(interaction.guild.id);
   trackedChannel = null;
   roster = [];
+  if (voiceStateListener) {
+    client.off(Events.VoiceStateUpdate, voiceStateListener);
+    voiceStateListener = null;
+  }
   connection.destroy();
   await interaction.reply('Captions stopped, left the voice channel.');
 }
