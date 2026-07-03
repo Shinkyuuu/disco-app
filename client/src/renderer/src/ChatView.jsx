@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-
-const MESSAGE_VISIBLE_MS = 5000;
 import SpeakerStrip from './SpeakerStrip';
-import MessageLog from './MessageLog';
+import MessageLog, { MESSAGE_VISIBLE_MS, MESSAGE_FADE_MS } from './MessageLog';
 import WindowMenu from './WindowMenu';
 import { customAvatars } from './customAvatars';
+
+// The one-time state-snapshot pull and the live transcript push are two
+// independent async writers of `entries` with no ordering guarantee between
+// them — merging (keyed by speakerId+receivedAt, deduped, time-sorted) makes
+// the result immune to which one resolves last. An unconditional overwrite
+// here previously let a late-resolving snapshot erase an already-appended
+// live message, which looked like the message vanishing immediately.
+function mergeEntries(current, incoming) {
+  const merged = new Map();
+  for (const entry of current) merged.set(`${entry.speakerId}-${entry.receivedAt}`, entry);
+  for (const entry of incoming) merged.set(`${entry.speakerId}-${entry.receivedAt}`, entry);
+  return [...merged.values()].sort((a, b) => a.receivedAt - b.receivedAt);
+}
 
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
@@ -86,19 +97,22 @@ export default function ChatView() {
     window.api.getStateSnapshot().then((snapshot) => {
       assignCustomAvatars(snapshot.roster);
       setRoster(snapshot.roster);
-      setEntries(snapshot.messageLog);
+      setEntries((prev) => mergeEntries(prev, snapshot.messageLog));
       setConnectionState(snapshot.connectionState);
     });
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
-  // Chats are only visible for 5 seconds — periodically drop entries older
-  // than that. receivedAt is stamped once in the main process (index.js) so
-  // this stays correct across a close/reopen, not restarted from mount time.
+  // Chats are fully visible for 5 seconds, then fade out over MESSAGE_FADE_MS
+  // (MessageLine computes the fade class from elapsed time on every render;
+  // this interval's only job is to force that periodic re-render, and to
+  // actually drop entries once the fade has finished). receivedAt is stamped
+  // once in the main process (index.js) so this stays correct across a
+  // close/reopen, not restarted from mount time.
   useEffect(() => {
     const interval = setInterval(() => {
-      const cutoff = Date.now() - MESSAGE_VISIBLE_MS;
-      setEntries((prev) => prev.filter((entry) => (entry.receivedAt ?? 0) >= cutoff));
+      const cutoff = Date.now() - (MESSAGE_VISIBLE_MS + MESSAGE_FADE_MS);
+      setEntries((prev) => prev.filter((entry) => entry.receivedAt >= cutoff));
     }, 250);
     return () => clearInterval(interval);
   }, []);
