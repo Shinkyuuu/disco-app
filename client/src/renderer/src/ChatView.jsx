@@ -6,12 +6,16 @@ import { customAvatars } from './customAvatars';
 
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
-function ChatFrame({ header = null, panelClass = '', children }) {
+// avatarSize/onAvatarSizeChange are only passed by the main render (where
+// avatars actually show) — the header height class still needs a size to
+// stay in sync with the window's own height (see main/index.js), so it
+// defaults to 'small' regardless.
+function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', onAvatarSizeChange, children }) {
   return (
     <div className="chat-root">
-      <div className="chat-header">{header}</div>
+      <div className={`chat-header chat-header--${avatarSize}`}>{header}</div>
       <div className={`chat-panel ${panelClass}`.trim()}>
-        <WindowMenu />
+        <WindowMenu avatarSize={onAvatarSizeChange ? avatarSize : undefined} onAvatarSizeChange={onAvatarSizeChange} />
         {children}
       </div>
     </div>
@@ -37,6 +41,13 @@ export default function ChatView() {
         assigned.set(member.speakerId, assigned.size);
       }
     }
+  }
+
+  function handleAvatarSizeChange(avatarSize) {
+    // Optimistic — the main process resizes the window in lockstep with this
+    // same call, so waiting for a round trip would visibly lag the resize.
+    setSettings((prev) => (prev ? { ...prev, avatarSize } : prev));
+    window.api.setSettings({ avatarSize });
   }
 
   useEffect(() => {
@@ -116,13 +127,18 @@ export default function ChatView() {
     );
   }
 
+  const avatarSize = settings?.avatarSize ?? 'small';
+
   return (
     <ChatFrame
+      avatarSize={avatarSize}
+      onAvatarSizeChange={handleAvatarSizeChange}
       header={
         <SpeakerStrip
           roster={roster}
           speakingIds={speakingIds}
           avatarMode={settings?.avatarMode ?? 'discord'}
+          avatarSize={avatarSize}
           customAvatarBySpeaker={Object.fromEntries(
             [...avatarIndexBySpeaker.current].map(([speakerId, i]) => [speakerId, customAvatars[i]]),
           )}
