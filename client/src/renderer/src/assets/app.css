@@ -79,16 +79,43 @@ select {
   background: #26272d;
   border: 1px solid #3a3b42;
   border-radius: 6px;
-  overflow: hidden;
-  min-width: 96px;
+  overflow: visible; /* the avatar-size submenu extends past this box's left edge */
+  min-width: 120px;
 }
 
-.window-menu-dropdown button {
-  display: block;
+.window-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   text-align: left;
   background: transparent;
   border-radius: 0;
+}
+
+.window-menu-item:hover,
+.window-menu-item--active {
+  background: #46474f;
+}
+
+.window-menu-item-arrow {
+  opacity: 0.6;
+}
+
+.window-menu-hoverable {
+  position: relative;
+}
+
+.window-menu-submenu {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  background: #26272d;
+  border: 1px solid #3a3b42;
+  border-radius: 6px;
+  overflow: hidden;
+  min-width: 96px;
 }
 
 /* --- launcher window --- */
@@ -136,14 +163,28 @@ select {
 }
 
 /* Invisible strip above the panel: avatars render here so they appear to
-   float above the window. Also the drag handle for the frameless window. */
+   float above the window. Also the drag handle for the frameless window.
+   Height must match main/index.js's HEADER_HEIGHT_BY_AVATAR_SIZE — the
+   window itself is resized to fit, or larger avatars get clipped by the
+   window's bounds (CSS overflow has no effect on that clipping). */
 .chat-header {
-  height: 96px;
   flex: none;
   display: flex;
   align-items: flex-end;
   padding: 0 16px;
   -webkit-app-region: drag;
+}
+
+.chat-header--small {
+  height: 96px;
+}
+
+.chat-header--medium {
+  height: 136px;
+}
+
+.chat-header--large {
+  height: 172px;
 }
 
 .chat-panel {
