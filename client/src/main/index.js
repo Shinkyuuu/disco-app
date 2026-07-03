@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError } from './protocolUrl.js';
 import { store } from './store.js';
+import { createWsClient } from './wsClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'discord-echo';
@@ -12,6 +13,87 @@ let chatWindow = null;
 let pendingAuthToken = null;
 let pendingAuthError = null;
 let deferredOpenUrl = null;
+
+let wsClient = null;
+let currentRoster = [];
+const messageLog = []; // [{ speakerId, username, avatarURL, text, isFinal }] — finalized entries only, in order, capped at 1000 (see the 'transcript' handler below)
+
+// Named generically, but every channel sent through here (roster/speaking/transcript/
+// ws-connection-state) is only ever consumed by ChatView — LauncherView never subscribes
+// to any of them — so this targets the chat window only, not every open window.
+function broadcastToRenderers(channel, payload) {
+  if (chatWindow) chatWindow.webContents.send(channel, payload);
+}
+
+function startWsClient() {
+  const token = store.get('sessionToken');
+  const serverAddress = store.get('serverAddress');
+  if (!token || wsClient) return;
+
+  wsClient = createWsClient({ serverAddress, token });
+
+  wsClient.on('roster', (members) => {
+    currentRoster = members;
+    broadcastToRenderers('roster', members);
+  });
+  wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
+  wsClient.on('transcript', (event) => {
+    if (event.isFinal) {
+      messageLog.push(event);
+      // Bound the array a very long session's worth of finalized lines could otherwise grow
+      // to unboundedly — this is what gets structured-clone'd over IPC on every chat-window
+      // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
+      // 1000 lines is far more scrollback than this product's use case (a live
+      // conversation, not an archive) ever needs to show on reopen.
+      if (messageLog.length > 1000) messageLog.shift();
+    }
+    broadcastToRenderers('transcript', event);
+  });
+  wsClient.on('open', () => broadcastToRenderers('ws-connection-state', { status: 'connected' }));
+  wsClient.on('close', (code, reason) => {
+    broadcastToRenderers('ws-connection-state', { status: 'disconnected', code, reason });
+    wsClient = null;
+  });
+}
+
+function createChatWindow() {
+  if (chatWindow) {
+    chatWindow.focus();
+    return;
+  }
+  chatWindow = new BrowserWindow({
+    width: 480,
+    height: 360,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  chatWindow.loadURL(rendererUrl('chat'));
+  chatWindow.on('ready-to-show', () => {
+    chatWindow.webContents.send('state-snapshot', { roster: currentRoster, messageLog });
+  });
+  chatWindow.on('closed', () => {
+    chatWindow = null;
+    if (launcherWindow) launcherWindow.restore();
+  });
+  if (launcherWindow) launcherWindow.minimize();
+}
+
+function logout() {
+  wsClient?.close();
+  wsClient = null;
+  messageLog.length = 0;
+  currentRoster = [];
+  store.delete('sessionToken');
+  if (chatWindow) chatWindow.close();
+  broadcastToRenderers('ws-connection-state', { status: 'logged-out' });
+}
+
+app.on('before-quit', () => {
+  wsClient?.close();
+});
 
 // --- Protocol registration ---
 if (process.defaultApp) {
@@ -96,6 +178,13 @@ function registerIpcHandlers() {
       store.set(key, value);
     }
   });
+
+  ipcMain.handle('start-chat-window', () => {
+    startWsClient();
+    createChatWindow();
+  });
+
+  ipcMain.handle('logout', () => logout());
 }
 
 function rendererUrl(view) {
