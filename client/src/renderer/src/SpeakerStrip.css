@@ -4,6 +4,37 @@
   gap: 8px;
 }
 
+.speaker {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Mute/deafen badge: emoji with a red diagonal slash drawn over it. */
+.speaker-badge {
+  position: absolute;
+  right: -2px;
+  bottom: 0;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px;
+  background: #1e1f24;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.speaker-badge::after {
+  content: '';
+  position: absolute;
+  left: 15%;
+  top: 48%;
+  width: 70%;
+  height: 2px;
+  background: #f04747;
+  border-radius: 1px;
+  transform: rotate(-45deg);
+}
+
 .speaker-icon {
   width: auto; /* keep the source aspect ratio — never force a square */
   transform: translateY(0) scale(1);

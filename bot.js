@@ -77,6 +77,9 @@ function buildRoster(channel) {
     speakerId: member.id,
     username: member.displayName,
     avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
+    // .mute/.deaf combine self- and server- states (either counts)
+    isMuted: member.voice.mute ?? false,
+    isDeafened: member.voice.deaf ?? false,
   }));
 }
 
@@ -185,8 +188,10 @@ async function handleCaptionsStart(interaction) {
   broadcast({ type: 'roster', members: roster });
 
   voiceStateListener = (oldState, newState) => {
-    if (oldState.channelId === newState.channelId) return; // mute/deafen/etc — no membership change, skip the rebuild
     if (oldState.channelId !== trackedChannel.channelId && newState.channelId !== trackedChannel.channelId) return;
+    const membershipChanged = oldState.channelId !== newState.channelId;
+    const muteOrDeafChanged = oldState.mute !== newState.mute || oldState.deaf !== newState.deaf;
+    if (!membershipChanged && !muteOrDeafChanged) return; // ignore e.g. video/stream toggles
     const trackedChannelObj = client.channels.cache.get(trackedChannel.channelId);
     if (!trackedChannelObj) return;
     roster = buildRoster(trackedChannelObj);
