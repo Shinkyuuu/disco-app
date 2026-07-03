@@ -8,6 +8,18 @@ import { createWsClient } from './wsClient.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'discord-echo';
 
+// The header strip's height must grow with avatar size or larger icons get
+// clipped by the window's own bounds (Electron windows clip all content to
+// their rect, regardless of CSS overflow). Panel height stays constant across
+// sizes so the message log doesn't shrink — only the window grows upward.
+const CHAT_WINDOW_WIDTH = 480;
+const CHAT_PANEL_HEIGHT = 324;
+const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 96, medium: 136, large: 172 };
+
+function chatWindowHeightFor(avatarSize) {
+  return (HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small) + CHAT_PANEL_HEIGHT;
+}
+
 let launcherWindow = null;
 let chatWindow = null;
 let pendingAuthToken = null;
@@ -91,8 +103,8 @@ function createChatWindow() {
     return;
   }
   chatWindow = new BrowserWindow({
-    width: 480,
-    height: 420,
+    width: CHAT_WINDOW_WIDTH,
+    height: chatWindowHeightFor(store.get('avatarSize')),
     frame: false,
     // Transparent so the header strip above the chat panel is invisible —
     // speaker avatars render there and appear to float above the window.
@@ -203,12 +215,19 @@ function registerIpcHandlers() {
   ipcMain.handle('get-settings', () => ({
     serverAddress: store.get('serverAddress'),
     avatarMode: store.get('avatarMode'),
+    avatarSize: store.get('avatarSize'),
     hasSessionToken: Boolean(store.get('sessionToken')),
   }));
 
   ipcMain.handle('set-settings', (_event, partial) => {
     for (const [key, value] of Object.entries(partial)) {
       store.set(key, value);
+    }
+    // Resize the already-open chat window immediately — otherwise a larger
+    // avatar size wouldn't take visual effect (or would clip) until the next
+    // time the window happens to be recreated.
+    if ('avatarSize' in partial && chatWindow) {
+      chatWindow.setSize(CHAT_WINDOW_WIDTH, chatWindowHeightFor(partial.avatarSize));
     }
   });
 

@@ -4,6 +4,14 @@
   gap: 8px;
 }
 
+.speaker-strip--medium {
+  gap: 10px;
+}
+
+.speaker-strip--large {
+  gap: 12px;
+}
+
 .speaker {
   position: relative;
   display: flex;
@@ -23,6 +31,16 @@
   pointer-events: none;
 }
 
+.speaker--medium .speaker-badge {
+  font-size: 13px;
+  padding: 4px;
+}
+
+.speaker--large .speaker-badge {
+  font-size: 15px;
+  padding: 5px;
+}
+
 .speaker-badge::after {
   content: '';
   position: absolute;
@@ -38,9 +56,12 @@
 .speaker-icon {
   width: auto; /* keep the source aspect ratio — never force a square */
   transform: translateY(0) scale(1);
-  transition: transform 150ms ease-out, filter 150ms ease-out;
+  transition: transform 150ms ease-out, filter 150ms ease-out, height 150ms ease-out, margin-bottom 150ms ease-out;
 }
 
+/* Sizes scale ~1.4x (medium) / ~1.8x (large) from the small baseline. The
+   chat window's height is resized in lockstep (main/index.js) so bigger
+   avatars are never clipped by the window's own bounds. */
 .speaker-icon--discord {
   height: 48px;
   border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
@@ -48,10 +69,30 @@
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
 }
 
+.speaker-icon--discord.speaker-icon--medium {
+  height: 67px;
+  margin-bottom: 8px;
+}
+
+.speaker-icon--discord.speaker-icon--large {
+  height: 86px;
+  margin-bottom: 10px;
+}
+
 .speaker-icon--custom {
   height: 88px;
   border-radius: 0; /* character art, not a round avatar — don't clip it */
   margin-bottom: -14px; /* bottom overlaps behind the chat panel (higher z-index) — "peeking out" */
+}
+
+.speaker-icon--custom.speaker-icon--medium {
+  height: 123px;
+  margin-bottom: -20px;
+}
+
+.speaker-icon--custom.speaker-icon--large {
+  height: 158px;
+  margin-bottom: -26px;
 }
 
 .speaker-icon--speaking {
