@@ -2,7 +2,7 @@ import 'dotenv/config';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, verifySessionToken } from './auth.js';
-import { isUserInTrackedChannel, getRoster } from './bot.js';
+import { isUserInTrackedChannel, getRoster, getUserProfile } from './bot.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -11,6 +11,7 @@ export const httpServer = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === '/auth/login') return handleAuthLogin(req, res);
   if (url.pathname === '/auth/callback') return handleAuthCallback(req, res);
+  if (url.pathname === '/api/me') return handleMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found — use the discord-echo Electron client to view captions.');
 });
@@ -56,6 +57,29 @@ export function createAuthGate({ verifyToken, isAuthorized, getRosterSnapshot, t
     });
   };
 }
+
+export function createMeHandler({ verifyToken, getProfile }) {
+  return function handleMe(req, res) {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+    const userId = token ? verifyToken(token) : null;
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const profile = getProfile(userId);
+    if (!profile) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ userId, ...profile }));
+  };
+}
+
+const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: getUserProfile });
 
 wss.on('connection', createAuthGate({
   verifyToken: verifySessionToken,
