@@ -43,11 +43,21 @@ const commands = [
 ];
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMembers],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildPresences,
+  ],
 });
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
+  // member.presence is only populated for cached members once GuildPresences
+  // is granted — a one-off REST guild.members.fetch(userId) lookup does not
+  // include presence data, so the whole guild is fetched once up front here.
+  const guild = readyClient.guilds.cache.get(DISCORD_SERVER_ID);
+  if (guild) await guild.members.fetch();
 });
 
 async function resolveSpeaker(guildId, userId) {
@@ -70,6 +80,18 @@ export function isUserInTrackedChannel(userId) {
 
 export function getRoster() {
   return roster;
+}
+
+export function getUserProfile(userId) {
+  const guild = client.guilds.cache.get(DISCORD_SERVER_ID);
+  const member = guild?.members.cache.get(userId);
+  if (!member) return null;
+  return {
+    username: member.displayName,
+    avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
+    discordStatus: member.presence?.status ?? 'offline',
+    inTrackedChannel: isUserInTrackedChannel(userId),
+  };
 }
 
 function buildRoster(channel) {
