@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate } from './gateway.js';
+import { createAuthGate, createMeHandler } from './gateway.js';
 
 function startTestServer(gateOptions) {
   return new Promise((resolve) => {
@@ -88,4 +89,54 @@ test('closes with 4008 if no auth message arrives before the timeout', async () 
   const closePromise = new Promise((resolve) => ws.once('close', (code) => resolve(code)));
   assert.equal(await closePromise, 4008);
   wss.close();
+});
+
+function startTestHttpServer(handler) {
+  return new Promise((resolve) => {
+    const server = http.createServer(handler);
+    server.listen(0, () => resolve({ server, port: server.address().port }));
+  });
+}
+
+test('GET /api/me returns 200 with profile JSON for a valid token', async () => {
+  const handler = createMeHandler({
+    verifyToken: (token) => (token === 'good-token' ? 'user-1' : null),
+    getProfile: (userId) =>
+      userId === 'user-1'
+        ? { username: 'Alice', avatarURL: 'https://x/a.png', discordStatus: 'online', inTrackedChannel: true }
+        : null,
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/me`, { headers: { Authorization: 'Bearer good-token' } });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.userId, 'user-1');
+  assert.equal(body.username, 'Alice');
+  assert.equal(body.discordStatus, 'online');
+  assert.equal(body.inTrackedChannel, true);
+  server.close();
+});
+
+test('GET /api/me returns 401 with no Authorization header', async () => {
+  const handler = createMeHandler({ verifyToken: () => 'user-1', getProfile: () => ({}) });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/me`);
+  assert.equal(res.status, 401);
+  server.close();
+});
+
+test('GET /api/me returns 401 for an invalid token', async () => {
+  const handler = createMeHandler({ verifyToken: () => null, getProfile: () => ({}) });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/me`, { headers: { Authorization: 'Bearer bad-token' } });
+  assert.equal(res.status, 401);
+  server.close();
+});
+
+test('GET /api/me returns 404 when the user has no matching guild member', async () => {
+  const handler = createMeHandler({ verifyToken: () => 'user-1', getProfile: () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/me`, { headers: { Authorization: 'Bearer tok' } });
+  assert.equal(res.status, 404);
+  server.close();
 });
