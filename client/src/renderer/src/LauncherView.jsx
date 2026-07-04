@@ -1,87 +1,83 @@
 import { useEffect, useState } from 'react';
 import TitleBar from './TitleBar';
+import SettingsView from './settings/SettingsView';
+import ProfileHeader from './ProfileHeader';
 
 export default function LauncherView() {
   const [settings, setSettings] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [page, setPage] = useState('main');
   const [loginError, setLoginError] = useState(null);
+  const [profileState, setProfileState] = useState({ reachable: true, profile: null });
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
+    window.api.getProfile().then((result) => {
+      if (result) setProfileState(result);
+    });
     const unsubscribes = [
       window.api.onAuthToken(() => {
         window.api.getSettings().then(setSettings);
         setLoginError(null);
       }),
       window.api.onAuthError((reason) => {
-        setLoginError(
-          reason === 'access_denied'
-            ? 'Login was cancelled.'
-            : 'Login failed — please try again.',
-        );
+        if (reason === 'session_expired') {
+          setLoginError(null);
+          window.api.getSettings().then(setSettings);
+          return;
+        }
+        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed — please try again.');
       }),
-      window.api.onOpenSettings(() => setShowSettings(true)),
+      window.api.onOpenSettings(() => setPage('settings')),
+      window.api.onProfile((result) => setProfileState(result)),
     ];
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe());
   }, []);
 
   if (!settings) return null;
 
-  function handleStartChatWindow() {
-    if (!settings.hasSessionToken) {
-      setLoginError(null);
-      window.api.openLogin(settings.serverAddress).catch(() =>
-        setLoginError('Could not reach the login page — check the server address in Settings and try again.'),
-      );
-      return;
-    }
-    window.api.startChatWindow();
+  function handleLogin() {
+    setLoginError(null);
+    window.api.openLogin(settings.serverAddress).catch(() =>
+      setLoginError('Could not reach the login page — check the server address in Settings and try again.'),
+    );
+  }
+
+  // Optimistic local settings update; `persist` also writes through to the store.
+  function handleSettingsChange(partial, persist) {
+    setSettings((s) => ({ ...s, ...partial }));
+    if (persist) window.api.setSettings(partial);
   }
 
   return (
     <div className="launcher-root">
       <TitleBar title="discord-echo" />
-      <div className="launcher-content">
-        {loginError && (
-          <div role="alert">
-            <p>{loginError}</p>
-            <button onClick={handleStartChatWindow}>Retry</button>
-          </div>
-        )}
-        <button onClick={() => setShowSettings((s) => !s)}>Settings</button>
-        <button onClick={handleStartChatWindow}>Start Chat Window</button>
-        {settings.hasSessionToken && (
-          <button onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}>
-            Log out
-          </button>
-        )}
-        {showSettings && (
-          <div>
-            <label>
-              Server address
-              <input
-                value={settings.serverAddress}
-                onChange={(e) => setSettings((s) => ({ ...s, serverAddress: e.target.value }))}
-                onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
-              />
-            </label>
-            <label>
-              Avatar mode
-              <select
-                value={settings.avatarMode}
-                onChange={(e) => {
-                  const avatarMode = e.target.value;
-                  setSettings((s) => ({ ...s, avatarMode }));
-                  window.api.setSettings({ avatarMode });
-                }}
-              >
-                <option value="discord">Discord avatar</option>
-                <option value="custom">Custom image</option>
-              </select>
-            </label>
-          </div>
-        )}
-      </div>
+      {page === 'settings' ? (
+        <SettingsView settings={settings} onSettingsChange={handleSettingsChange} onBack={() => setPage('main')} />
+      ) : (
+        <div className="launcher-content">
+          {loginError && (
+            <div role="alert">
+              <p>{loginError}</p>
+              <button onClick={handleLogin}>Retry</button>
+            </div>
+          )}
+          {settings.hasSessionToken ? (
+            <>
+              <ProfileHeader profile={profileState.profile} reachable={profileState.reachable} />
+              <button onClick={() => setPage('settings')}>Settings</button>
+              <button onClick={() => window.api.startChatWindow()}>Start Chat Window</button>
+              <button onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}>
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setPage('settings')}>Settings</button>
+              <button onClick={handleLogin}>Login to Discord</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
