@@ -57,7 +57,13 @@ client.once(Events.ClientReady, async (readyClient) => {
   // is granted — a one-off REST guild.members.fetch(userId) lookup does not
   // include presence data, so the whole guild is fetched once up front here.
   const guild = readyClient.guilds.cache.get(DISCORD_SERVER_ID);
-  if (guild) await guild.members.fetch();
+  if (guild) {
+    try {
+      await guild.members.fetch();
+    } catch (err) {
+      console.error('Failed to fetch guild members:', err);
+    }
+  }
 });
 
 async function resolveSpeaker(guildId, userId) {
