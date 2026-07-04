@@ -1,9 +1,22 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseAuthToken, parseAuthError } from './protocolUrl.js';
+import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
 import { store } from './store.js';
 import { createWsClient } from './wsClient.js';
+import { schemeFor } from './serverScheme.js';
+import {
+  reconcileFriendProfiles,
+  resolveSpeakerProfile,
+  getDefaultProfiles,
+  getFriendProfiles,
+  pickAvatarImage,
+  clearAvatarImage,
+  setDefaultProfileColors,
+  addFriendProfile,
+  setFriendProfileColors,
+  removeFriendProfile,
+} from './profiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'discord-echo';
@@ -15,6 +28,7 @@ const PROTOCOL = 'discord-echo';
 const CHAT_WINDOW_WIDTH = 480;
 const CHAT_PANEL_HEIGHT = 324;
 const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 96, medium: 136, large: 172 };
+const MIN_CHAT_PANEL_HEIGHT = 100;
 
 function chatWindowHeightFor(avatarSize) {
   return (HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small) + CHAT_PANEL_HEIGHT;
@@ -108,18 +122,30 @@ function createChatWindow() {
     chatWindow.focus();
     return;
   }
+  const avatarSize = store.get('avatarSize');
+  const headerH = HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
   chatWindow = new BrowserWindow({
-    width: CHAT_WINDOW_WIDTH,
-    height: chatWindowHeightFor(store.get('avatarSize')),
+    width: store.get('chatWindowWidth'),
+    height: store.get('chatWindowPanelHeight') + headerH,
+    minWidth: 300,
+    minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT,
     frame: false,
     // Transparent so the header strip above the chat panel is invisible —
     // speaker avatars render there and appear to float above the window.
     transparent: true,
+    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  chatWindow.on('resized', () => {
+    const [w, h] = chatWindow.getSize();
+    const currentAvatarSize = store.get('avatarSize');
+    const currentHeaderH = HEADER_HEIGHT_BY_AVATAR_SIZE[currentAvatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
+    store.set('chatWindowWidth', w);
+    store.set('chatWindowPanelHeight', Math.max(h - currentHeaderH, MIN_CHAT_PANEL_HEIGHT));
   });
   chatWindow.loadURL(rendererUrl('chat'));
   chatWindow.on('closed', () => {
@@ -135,6 +161,7 @@ function logout() {
   messageLog.length = 0;
   currentRoster = [];
   store.delete('sessionToken');
+  store.delete('loggedInUserId');
   if (chatWindow) chatWindow.close();
   setConnectionState({ status: 'logged-out' });
 }
@@ -152,8 +179,9 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient(PROTOCOL);
 }
 
-function deliverAuthToken(token) {
+function deliverAuthToken(token, userId) {
   store.set('sessionToken', token);
+  if (userId) store.set('loggedInUserId', userId);
   if (launcherWindow) {
     launcherWindow.webContents.send('auth-token', token);
   } else {
@@ -172,7 +200,7 @@ function deliverAuthError(reason) {
 function handleDeepLink(url) {
   const token = parseAuthToken(url);
   if (token) {
-    deliverAuthToken(token);
+    deliverAuthToken(token, parseAuthUserId(url));
     return;
   }
   const error = parseAuthError(url);
@@ -204,6 +232,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    reconcileFriendProfiles(store);
     registerIpcHandlers();
     createLauncherWindow();
     if (deferredOpenUrl) handleDeepLink(deferredOpenUrl);
@@ -212,9 +241,7 @@ if (!gotLock) {
 
 function registerIpcHandlers() {
   ipcMain.handle('open-login', (_event, serverAddress) => {
-    // Same scheme rule as wsClient.js: bare host:port is local dev (http),
-    // a plain hostname is a hosted deployment behind TLS (https).
-    const scheme = serverAddress.includes('localhost') || /:\d+$/.test(serverAddress) ? 'http' : 'https';
+    const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
     shell.openExternal(`${scheme}://${serverAddress}/auth/login`);
   });
 
@@ -222,7 +249,9 @@ function registerIpcHandlers() {
     serverAddress: store.get('serverAddress'),
     avatarMode: store.get('avatarMode'),
     avatarSize: store.get('avatarSize'),
+    chatOpacity: store.get('chatOpacity'),
     hasSessionToken: Boolean(store.get('sessionToken')),
+    loggedInUserId: store.get('loggedInUserId'),
   }));
 
   ipcMain.handle('set-settings', (_event, partial) => {
@@ -233,7 +262,8 @@ function registerIpcHandlers() {
     // avatar size wouldn't take visual effect (or would clip) until the next
     // time the window happens to be recreated.
     if ('avatarSize' in partial && chatWindow) {
-      chatWindow.setSize(CHAT_WINDOW_WIDTH, chatWindowHeightFor(partial.avatarSize));
+      const newHeaderH = HEADER_HEIGHT_BY_AVATAR_SIZE[partial.avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
+      chatWindow.setSize(store.get('chatWindowWidth'), store.get('chatWindowPanelHeight') + newHeaderH);
     }
   });
 
@@ -280,6 +310,47 @@ function registerIpcHandlers() {
 
   ipcMain.handle('window-is-maximized', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
+  });
+
+  ipcMain.handle('resolve-speaker-profile', (_event, args) => resolveSpeakerProfile(store, args));
+  ipcMain.handle('get-default-profiles', () => getDefaultProfiles(store));
+  ipcMain.handle('get-friend-profiles', () => getFriendProfiles(store));
+  ipcMain.handle('pick-default-avatar-image', (_event, { slotIndex, kind }) =>
+    pickAvatarImage({ scope: 'default', id: String(slotIndex + 1).padStart(2, '0'), kind }),
+  );
+  ipcMain.handle('pick-friend-avatar-image', async (_event, { userId, kind }) => {
+    const dataUrl = await pickAvatarImage({ scope: 'friend', id: userId, kind });
+    // A picked image alone should make this user "have a profile" so
+    // getFriendProfiles lists them (and the preview persists) even before any
+    // color is set — mirrors reconciliation for hand-created folders.
+    if (dataUrl) addFriendProfile(store, userId);
+    return dataUrl;
+  });
+  ipcMain.handle('clear-default-avatar-image', (_event, { slotIndex, kind }) =>
+    clearAvatarImage({ scope: 'default', id: String(slotIndex + 1).padStart(2, '0'), kind }),
+  );
+  ipcMain.handle('clear-friend-avatar-image', (_event, { userId, kind }) =>
+    clearAvatarImage({ scope: 'friend', id: userId, kind }),
+  );
+  ipcMain.handle('set-default-profile-colors', (_event, { slotIndex, colors }) =>
+    setDefaultProfileColors(store, slotIndex, colors),
+  );
+  ipcMain.handle('add-friend-profile', (_event, userId) => addFriendProfile(store, userId));
+  ipcMain.handle('set-friend-profile-colors', (_event, { userId, colors }) =>
+    setFriendProfileColors(store, userId, colors),
+  );
+  ipcMain.handle('remove-friend-profile', (_event, userId) => removeFriendProfile(store, userId));
+
+  ipcMain.handle('resize-window', (event, { width, height }) => {
+    BrowserWindow.fromWebContents(event.sender)?.setSize(width, height);
+  });
+
+  ipcMain.handle('window-is-always-on-top', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isAlwaysOnTop() ?? false;
+  });
+
+  ipcMain.handle('window-set-always-on-top', (event, value) => {
+    BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value);
   });
 }
 
