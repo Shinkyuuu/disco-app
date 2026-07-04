@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
 import { nextDelay } from './backoff.js';
+import { schemeFor } from './serverScheme.js';
 
 const AUTH_CLOSE_CODES = new Set([4001, 4002, 4003, 4008]);
 
@@ -11,9 +12,7 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
   let socket = null;
 
   function connect() {
-    // Bare host:port (local dev) → plaintext ws; hostname without a port (hosted,
-    // behind TLS) → wss. Matches the openLogin http/https rule in index.js.
-    const scheme = serverAddress.includes('localhost') || /:\d+$/.test(serverAddress) ? 'ws' : 'wss';
+    const scheme = schemeFor(serverAddress, { secure: 'wss', insecure: 'ws' });
     socket = new WebSocket(`${scheme}://${serverAddress}/`);
 
     socket.on('open', () => {
