@@ -5,6 +5,7 @@ import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.j
 import { store } from './store.js';
 import { createWsClient } from './wsClient.js';
 import { schemeFor } from './serverScheme.js';
+import { fetchProfile, AuthError } from './profileClient.js';
 import {
   reconcileFriendProfiles,
   resolveSpeakerProfile,
@@ -41,6 +42,8 @@ let pendingAuthError = null;
 let deferredOpenUrl = null;
 
 let wsClient = null;
+const PROFILE_POLL_INTERVAL_MS = 15000;
+let profilePollTimer = null;
 let currentRoster = [];
 const messageLog = []; // [{ speakerId, username, avatarURL, text, isFinal }] — finalized entries only, in order, capped at 1000 (see the 'transcript' handler below)
 
@@ -117,6 +120,43 @@ function startWsClient() {
   });
 }
 
+function handleProfileAuthFailure() {
+  stopProfilePolling();
+  store.delete('sessionToken');
+  store.delete('loggedInUserId');
+  if (launcherWindow) launcherWindow.webContents.send('auth-error', 'session_expired');
+}
+
+async function pollProfileOnce() {
+  const token = store.get('sessionToken');
+  if (!token) return { reachable: true, profile: null };
+  try {
+    const profile = await fetchProfile({ serverAddress: store.get('serverAddress'), token });
+    return { reachable: true, profile };
+  } catch (err) {
+    if (err instanceof AuthError) {
+      handleProfileAuthFailure();
+      return null; // handleProfileAuthFailure already notified the renderer directly
+    }
+    return { reachable: false, profile: null };
+  }
+}
+
+function startProfilePolling() {
+  if (profilePollTimer) return;
+  profilePollTimer = setInterval(async () => {
+    const result = await pollProfileOnce();
+    if (result && launcherWindow) launcherWindow.webContents.send('profile', result);
+  }, PROFILE_POLL_INTERVAL_MS);
+}
+
+function stopProfilePolling() {
+  if (profilePollTimer) {
+    clearInterval(profilePollTimer);
+    profilePollTimer = null;
+  }
+}
+
 function createChatWindow() {
   if (chatWindow) {
     chatWindow.focus();
@@ -156,6 +196,7 @@ function createChatWindow() {
 }
 
 function logout() {
+  stopProfilePolling();
   wsClient?.close();
   wsClient = null;
   messageLog.length = 0;
@@ -182,6 +223,7 @@ if (process.defaultApp) {
 function deliverAuthToken(token, userId) {
   store.set('sessionToken', token);
   if (userId) store.set('loggedInUserId', userId);
+  startProfilePolling();
   if (launcherWindow) {
     launcherWindow.webContents.send('auth-token', token);
   } else {
@@ -235,6 +277,7 @@ if (!gotLock) {
     reconcileFriendProfiles(store);
     registerIpcHandlers();
     createLauncherWindow();
+    if (store.get('sessionToken')) startProfilePolling();
     if (deferredOpenUrl) handleDeepLink(deferredOpenUrl);
   });
 }
@@ -279,6 +322,8 @@ function registerIpcHandlers() {
     messageLog,
     connectionState: lastConnectionState,
   }));
+
+  ipcMain.handle('get-profile', () => pollProfileOnce());
 
   ipcMain.handle('logout', () => logout());
 
@@ -385,6 +430,7 @@ function createLauncherWindow() {
   launcherWindow.on('unmaximize', () => launcherWindow.webContents.send('window-maximized-change', false));
   launcherWindow.on('closed', () => {
     launcherWindow = null;
+    stopProfilePolling();
   });
 }
 
