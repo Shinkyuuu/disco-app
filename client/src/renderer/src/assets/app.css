@@ -448,7 +448,8 @@ select {
 }
 
 .settings-section {
-  background: #26272d;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   padding: 12px;
 }
@@ -652,7 +653,8 @@ select {
   align-items: center;
   gap: 14px;
   padding: 16px;
-  background: #26272d;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   margin-bottom: 14px;
 }
