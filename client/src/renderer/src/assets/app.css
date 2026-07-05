@@ -185,7 +185,7 @@ select {
   position: relative;
   height: 100%;
   background: #0d0e11;
-  border: 1px solid #2e2f35;
+  border: 1px solid #6d5efc;
   display: flex;
   flex-direction: column;
 }
@@ -409,13 +409,22 @@ select {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #1e1f24;
+  background: #0d0e11;
 }
 
 .settings-topbar {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   padding: 8px 12px;
   border-bottom: 1px solid #26272d;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .settings-scroll {
@@ -423,9 +432,9 @@ select {
   min-height: 0;
   overflow-y: auto;
   width: 100%;
-  max-width: 640px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 12px 20px 20px;
+  padding: 12px 12px 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -438,9 +447,12 @@ select {
 }
 
 .settings-heading {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0;
+  font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
 }
 
 .settings-subtext {
@@ -459,7 +471,7 @@ select {
 
 /* Your Profile — pinned, accent-bordered */
 .your-profile {
-  border: 1px solid #5865f2;
+  border: 1px solid #6d5efc;
 }
 .your-profile--disabled {
   opacity: 0.7;
@@ -493,8 +505,8 @@ select {
 .pf-avatar {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
-  object-fit: cover;
+  border-radius: 8px;
+  object-fit: contain;
   background: #1e1f24;
 }
 .pf-avatar--empty {
@@ -590,8 +602,8 @@ select {
 }
 .friend-id {
   font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
-  opacity: 0.8;
+  font-size: 13px;
+  opacity: 0.6;
   margin-bottom: 10px;
 }
 .friend-add-row {
@@ -605,7 +617,6 @@ select {
 /* --- profile header (launcher, logged in) --- */
 .profile-header-block {
   position: relative;
-  margin-bottom: 14px;
 }
 
 /* Reserves room above the box for the peeking avatar (custom-avatar mode
@@ -636,6 +647,7 @@ select {
   padding: 16px;
   background: #26272d;
   border-radius: 8px;
+  margin-bottom: 14px;
 }
 
 .profile-header-avatar {
@@ -687,9 +699,9 @@ select {
 }
 
 .profile-header-tag--active {
-  background: rgba(88, 101, 242, 0.18);
-  border-color: #5865f2;
-  color: #a6b0ff;
+  background: rgba(109, 94, 252, 0.18);
+  border-color: #6d5efc;
+  color: #c5bffe;
 }
 
 .profile-header-tag--inactive {
