@@ -66,6 +66,7 @@ button {
 
 button:hover {
   background: #26272d;
+  border-color: #6d5efc;
 }
 
 input,
@@ -262,6 +263,10 @@ select {
   font-weight: 600;
 }
 
+.start-chat-glow {
+  margin-bottom: 20px;
+}
+
 .start-chat-glow .launcher-primary-btn {
   width: 100%;
   background: transparent;
@@ -289,6 +294,7 @@ select {
 
 .launcher-danger-btn:hover {
   background: rgba(232, 17, 35, 0.22);
+  border-color: #e81123;
 }
 
 .launcher-content label {
