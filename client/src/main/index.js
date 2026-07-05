@@ -144,10 +144,12 @@ async function pollProfileOnce() {
 
 function startProfilePolling() {
   if (profilePollTimer) return;
-  profilePollTimer = setInterval(async () => {
+  const tick = async () => {
     const result = await pollProfileOnce();
     if (result && launcherWindow) launcherWindow.webContents.send('profile', result);
-  }, PROFILE_POLL_INTERVAL_MS);
+  };
+  tick(); // immediate poll so a fresh login / cold start doesn't wait a full interval
+  profilePollTimer = setInterval(tick, PROFILE_POLL_INTERVAL_MS);
 }
 
 function stopProfilePolling() {
