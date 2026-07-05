@@ -25,11 +25,14 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
   return (
     <div className="settings-view">
       <div className="settings-topbar">
-        <button onClick={onBack}>← Back</button>
+        <button className="settings-back-btn" onClick={onBack} aria-label="Back">
+          ←
+        </button>
+        <h2 className="settings-title">Settings</h2>
       </div>
       <div className="settings-scroll">
+        <h3 className="settings-heading">Connection</h3>
         <section className="settings-section">
-          <h3 className="settings-heading">Connection</h3>
           <label className="settings-field">
             Server address
             <input
