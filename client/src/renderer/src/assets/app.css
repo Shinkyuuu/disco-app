@@ -191,18 +191,48 @@ select {
   flex-direction: column;
 }
 
+.aurora-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.aurora-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 /* --- title bar (VS Code-style custom chrome for the launcher window) --- */
 .title-bar {
-  height: 32px;
+  height: 48px;
   flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-left: 12px;
-  font-size: 13px;
+  padding-left: 18px;
+  font-size: 20px;
   font-weight: 600;
-  background: #080809;
+  background: #15161b;
+  border-bottom: 1px solid #26272d;
   -webkit-app-region: drag; /* frameless window — this bar is the drag handle */
+}
+
+.title-bar-title {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.title-bar-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  flex: none;
 }
 
 .title-bar-text {
@@ -221,10 +251,11 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 46px;
+  width: 48px;
   height: 100%;
   padding: 0;
   background: transparent;
+  border: none;
   border-radius: 0;
   color: inherit;
 }
@@ -233,21 +264,36 @@ select {
   background: #3a3b42;
 }
 
-.title-bar-button--close:hover {
-  background: #e81123;
+.title-bar-button--close {
+  background: #e0526a;
   color: #ffffff;
 }
 
+.title-bar-button--close:hover {
+  background: #c93f57;
+}
+
 .launcher-content {
+  position: relative;
+  z-index: 1;
   flex: 1;
   width: 100%;
   max-width: 480px;
-  margin: 0 auto;
+  margin: 20px auto;
   padding: 32px 20px 20px;
+  background: #0d0e11;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   align-items: stretch;
+}
+
+.launcher-title {
+  margin: 0 0 24px;
+  font-size: 28px;
+  font-weight: 700;
 }
 
 .launcher-content button {
@@ -327,15 +373,15 @@ select {
 }
 
 .chat-header--small {
-  height: 96px;
+  height: 158px;
 }
 
 .chat-header--medium {
-  height: 136px;
+  height: 221px;
 }
 
 .chat-header--large {
-  height: 172px;
+  height: 281px;
 }
 
 .chat-panel {
@@ -344,7 +390,7 @@ select {
   min-height: 0;
   z-index: 1;
   background: #0d0e11;
-  border: 1px solid #2e2f35;
+  border: 1px solid #ffffff;
   border-radius: 10px;
   display: flex;
   flex-direction: column;
@@ -411,21 +457,29 @@ select {
 
 /* --- settings page (launcher) --- */
 .settings-view {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: #0d0e11;
 }
 
 .settings-topbar {
   flex: none;
+  border-bottom: 1px solid #26272d;
+  padding: 10px 0 14px;
+}
+
+.settings-topbar-inner {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  padding: 10px 12px 14px;
-  border-bottom: 1px solid #26272d;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 12px;
 }
 
 .settings-back-btn {
@@ -435,8 +489,8 @@ select {
 }
 
 .settings-title {
-  margin: 0;
-  font-size: 20px;
+  margin: 0 0 24px;
+  font-size: 28px;
   font-weight: 700;
 }
 
@@ -446,8 +500,11 @@ select {
   overflow-y: auto;
   width: 100%;
   max-width: 900px;
-  margin: 0 auto;
+  margin: 16px auto;
   padding: 12px 12px 20px;
+  background: #0d0e11;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -631,24 +688,45 @@ select {
 /* --- profile header (launcher, logged in) --- */
 .profile-header-block {
   position: relative;
+  padding-top: 58px; /* reserves room above the box for .profile-speech-bubble */
 }
 
 /* Reserves room above the box for the peeking avatar (custom-avatar mode
    only) — just its bottom sliver overlaps down into the box below, which
-   paints over it (z-index: 1), matching the chat window's "large" custom
-   avatar size/overlap ratio (speaker-icon--custom.speaker-icon--large). */
+   paints over it (z-index: 1), matching the chat window's "medium" custom
+   avatar size/overlap ratio (speaker-icon--custom.speaker-icon--medium). */
 .profile-header-block--peeking {
-  padding-top: 108px;
+  padding-top: 152px;
 }
 
 .profile-peek-avatar {
   position: absolute;
   top: 0;
   left: 16px;
-  max-height: 130px;
-  max-width: 130px;
+  max-height: 183px;
+  max-width: 146px;
   border-radius: 0; /* character art, not a round avatar — don't clip it */
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+}
+
+/* Speech bubble floating above the profile box, right of the avatar
+   (avatar is 64px wide, starting at the box's 16px padding, so its right
+   edge sits at 80px — this bubble starts 50px past that). No separate tail
+   element — the bottom-left corner is left square (pointing down toward the
+   avatar) while the other three corners are rounded more, reading as a
+   speech-bubble shape without a triangle that has to seam perfectly. */
+.profile-speech-bubble {
+  position: absolute;
+  top: 0;
+  left: 150px;
+  max-width: 170px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #1a1b1f;
+  border-radius: 14px 14px 14px 0;
+  font-size: 12px;
+  line-height: 1.35;
   pointer-events: none;
 }
 
@@ -659,15 +737,14 @@ select {
   align-items: center;
   gap: 14px;
   padding: 16px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #26272d;
   border-radius: 8px;
   margin-bottom: 14px;
 }
 
 .profile-header-avatar {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid transparent;
@@ -729,4 +806,20 @@ select {
   margin: 0;
   font-size: 12px;
   opacity: 0.7;
+}
+
+.status-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #6d5efc;
+  border-radius: 50%;
+  animation: status-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes status-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
