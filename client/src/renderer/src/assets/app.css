@@ -415,16 +415,23 @@ select {
 .settings-topbar {
   flex: none;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px 14px;
   border-bottom: 1px solid #26272d;
+}
+
+.settings-back-btn {
+  padding: 4px 10px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .settings-title {
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .settings-scroll {
