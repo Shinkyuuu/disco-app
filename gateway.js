@@ -13,7 +13,7 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/auth/callback') return handleAuthCallback(req, res);
   if (url.pathname === '/api/me') return handleMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not found — use the discord-echo Electron client to view captions.');
+  res.end('Not found - use the Disco Electron client to view captions.');
 });
 
 const gatewayClients = new Set();

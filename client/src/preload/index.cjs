@@ -2,8 +2,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Every on* subscription returns an unsubscribe function. Without it, a React
 // effect re-run (StrictMode's dev double-mount, or any real remount) stacks a
-// second listener and non-idempotent handlers — like appending a transcript
-// line — fire once per stacked listener.
+// second listener and non-idempotent handlers - like appending a transcript
+// line - fire once per stacked listener.
 function subscribe(channel, wrap) {
   return (callback) => {
     const listener = wrap(callback);
