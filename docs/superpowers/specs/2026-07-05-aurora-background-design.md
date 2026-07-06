@@ -13,21 +13,21 @@ container, starting immediately below the title bar.
 
 New files: `client/src/renderer/src/Aurora.jsx`, `Aurora.css`.
 
-Direct port of the ReactBits Aurora component — same approach already used
+Direct port of the ReactBits Aurora component - same approach already used
 for `BorderGlow.jsx` ("Adapted from the ReactBits Border Glow component").
 Renders a WebGL canvas via the `ogl` library (new dependency) running a
 GLSL simplex-noise fragment shader that animates a flowing color-ramp
 gradient across a `<canvas>` filling its container.
 
 Props (matching upstream defaults):
-- `colorStops` — array of 3 hex colors. We pass `['#3b82f6', '#7C3AED', '#3b82f6']`.
+- `colorStops` - array of 3 hex colors. We pass `['#3b82f6', '#7C3AED', '#3b82f6']`.
 - `amplitude` (default `1.0`), `blend` (default `0.5`), `speed` (default `1.0`).
 
 Behavior: mounts a WebGL renderer/program/mesh on mount, drives it with
 `requestAnimationFrame`, listens for `window` resize to keep the canvas
 sized to its container, and tears everything down (cancels the animation
 frame, removes the resize listener, removes the canvas, loses the WebGL
-context) on unmount. No React state — props are read through a ref each
+context) on unmount. No React state - props are read through a ref each
 frame so the animation loop doesn't need to restart when props change.
 
 ## Layout changes
@@ -40,7 +40,7 @@ Both the launcher window (`LauncherView.jsx`) and the settings page
   overflow: hidden`). It contains the `Aurora` canvas and the page content
   (`launcher-content` or `SettingsView`) as siblings.
 - `Aurora` is wrapped in a `.aurora-backdrop` div: `position: absolute;
-  inset: 0; z-index: 0; pointer-events: none` — sits behind everything,
+  inset: 0; z-index: 0; pointer-events: none` - sits behind everything,
   never intercepts clicks or the title-bar drag region.
 - `.launcher-content` (main window) and `.settings-scroll` (settings page)
   become the foreground container: `position: relative; z-index: 1`, a
@@ -49,16 +49,16 @@ Both the launcher window (`LauncherView.jsx`) and the settings page
   margin on all sides so the aurora frames it rather than touching edge to
   edge.
 - Content already inside those containers (buttons, `.settings-section`
-  cards, `.your-profile`, friend cards, etc.) is untouched — existing
+  cards, `.your-profile`, friend cards, etc.) is untouched - existing
   borders stay, nested inside the new outer card.
 - `.settings-topbar` (back button + "Settings" title) stays outside/above
   the card with a transparent background, so the aurora is visible behind
-  it too — consistent with the main window, which has no header row above
+  it too - consistent with the main window, which has no header row above
   its card.
 
 ## Out of scope
 
-- The chat window / overlay (captions UI) is unaffected — this is launcher
+- The chat window / overlay (captions UI) is unaffected - this is launcher
   and settings only.
 - No new configuration/settings for aurora colors or toggling it off.
 

@@ -1,11 +1,11 @@
-# Launcher window layout — design
+# Launcher window layout - design
 
 ## Purpose
 
 The launcher window's main screen (login / logged-in view) currently stretches
 its content to fill the full window width, and its buttons are a flat vertical
 stack of equal-weight buttons. This looks awkward if the window is widened or
-maximized, and doesn't give "Start Chat Window" — the primary action — visual
+maximized, and doesn't give "Start Chat Window" - the primary action - visual
 priority over "Settings" / "Log out".
 
 ## Scope
@@ -21,14 +21,14 @@ behavior, so it keeps its current full-width layout.
 
 ## Design
 
-1. **Centered content on wide windows** — `.launcher-content` (in
+1. **Centered content on wide windows** - `.launcher-content` (in
    `client/src/renderer/src/assets/app.css`) gets `max-width: 380px`,
    `margin: 0 auto`, `width: 100%`. On the default/narrow window this is a
    no-op (content already fills the width); if the user widens or maximizes
    the window, content stays centered with margin on both sides instead of
    stretching edge-to-edge.
 
-2. **Button layout (logged-in branch only)** — in
+2. **Button layout (logged-in branch only)** - in
    `client/src/renderer/src/LauncherView.jsx`:
    - "Start Chat Window" becomes a larger, primary-style, full-width button
      (bigger padding/font).
@@ -36,22 +36,22 @@ behavior, so it keeps its current full-width layout.
      `flex: 1`.
    - The logged-out branch (Settings + Login) is unchanged in structure.
 
-3. **Default window size** — the taller button stack needs more vertical
+3. **Default window size** - the taller button stack needs more vertical
    room, so the launcher window's default size changes from 360×480 to
    360×560 in `createLauncherWindow` (`client/src/main/index.js`).
    `SettingsView.jsx` already hardcodes a resize-back-to-launcher-size call
-   (`window.api.resizeWindow(360, 480)`) when it unmounts — this existing
+   (`window.api.resizeWindow(360, 480)`) when it unmounts - this existing
    duplicate of the default size must be updated to `360, 560` in the same
    change, or closing Settings would shrink the window back to the old size.
 
 ## Files touched
 
-- `client/src/renderer/src/assets/app.css` — `.launcher-content` centering
-- `client/src/renderer/src/LauncherView.jsx` — button markup/structure for the
+- `client/src/renderer/src/assets/app.css` - `.launcher-content` centering
+- `client/src/renderer/src/LauncherView.jsx` - button markup/structure for the
   logged-in branch, plus corresponding CSS classes for the primary button and
   button row
-- `client/src/main/index.js` — default launcher window height
-- `client/src/renderer/src/settings/SettingsView.jsx` — restore-size constant
+- `client/src/main/index.js` - default launcher window height
+- `client/src/renderer/src/settings/SettingsView.jsx` - restore-size constant
   kept in sync with the new default
 
 ## Verification

@@ -4,7 +4,7 @@
 
 **Goal:** Add a dedicated "Login to Discord" button to the launcher (shown while logged out) and a profile header (shown while logged in) displaying the user's avatar, username, user_id, Discord presence, tracked-voice-channel membership, and discord-echo server reachability.
 
-**Architecture:** Display identity (username/avatar) is read from the bot's existing guild-member cache in `bot.js` — the same source already used for roster/speaker attribution — not from OAuth. A new `GET /api/me` HTTP endpoint (session-token authenticated, decoupled from the caption WebSocket's auth gate) exposes that plus Discord presence and tracked-channel membership. The Electron client polls it every 15s while the launcher is open and pushes updates over IPC to a new `ProfileHeader` component.
+**Architecture:** Display identity (username/avatar) is read from the bot's existing guild-member cache in `bot.js` - the same source already used for roster/speaker attribution - not from OAuth. A new `GET /api/me` HTTP endpoint (session-token authenticated, decoupled from the caption WebSocket's auth gate) exposes that plus Discord presence and tracked-channel membership. The Electron client polls it every 15s while the launcher is open and pushes updates over IPC to a new `ProfileHeader` component.
 
 **Tech Stack:** Node.js (`node:test`, `node:http`), discord.js 14, `ws`, Electron 39 (ESM main, CJS preload), React 19.
 
@@ -14,7 +14,7 @@
 - **Manual prerequisite (not code):** enabling `GatewayIntentBits.GuildPresences` in code requires also toggling "Presence Intent" on for this bot application in the Discord Developer Portal (Bot tab). Without that toggle, `member.presence` stays `undefined` regardless of the code change.
 - **"Connection status" = discord-echo server reachability** (did the last `/api/me` poll succeed), derived independently of the caption WebSocket. The caption WS's existing lazy start-on-demand behavior (only connects when "Start Chat Window" is clicked) is **not changed**.
 - **Poll interval:** 15000ms, running whenever a session token exists and the launcher window is open; starts on login and at startup (if already logged in), stops on logout and launcher-window-close.
-- **No persistence** of username/avatar/status in `electron-store` — always fetched fresh via the poll.
+- **No persistence** of username/avatar/status in `electron-store` - always fetched fresh via the poll.
 - **Shared scheme rule:** bare `host:port` (local dev) → plaintext (`http`/`ws`); hostname without a port (hosted, behind TLS) → secure (`https`/`wss`). Centralized in a new `client/src/main/serverScheme.js`, replacing the two inline copies of this rule in `index.js` and `wsClient.js`.
 - Follow existing patterns: single-purpose main-process modules wired up by `index.js`; pure logic colocated with a `node:test` file; thin `ipcRenderer.invoke`/`contextBridge` preload wrappers; injectable-dependency factories for anything HTTP/WS-testable (matches `createAuthGate` in `gateway.js`).
 
@@ -32,7 +32,7 @@
 **Interfaces:**
 - Produces: `schemeFor(serverAddress: string, { secure: string, insecure: string }) -> string`
 
-- [ ] **Step 1: Write the failing tests** — create `client/src/main/serverScheme.test.js`:
+- [ ] **Step 1: Write the failing tests** - create `client/src/main/serverScheme.test.js`:
 
 ```js
 import { test } from 'node:test';
@@ -57,9 +57,9 @@ test('works for the ws/wss pair too', () => {
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `cd client && node --test src/main/serverScheme.test.js`
-Expected: FAIL — `Cannot find module './serverScheme.js'`
+Expected: FAIL - `Cannot find module './serverScheme.js'`
 
-- [ ] **Step 3: Implement** — create `client/src/main/serverScheme.js`:
+- [ ] **Step 3: Implement** - create `client/src/main/serverScheme.js`:
 
 ```js
 // Bare host:port (local dev) → plaintext; hostname without a port (hosted,
@@ -75,7 +75,7 @@ export function schemeFor(serverAddress, { secure, insecure }) {
 Run: `cd client && node --test src/main/serverScheme.test.js`
 Expected: PASS (3 tests)
 
-- [ ] **Step 5: Adopt it in `index.js`** — in `client/src/main/index.js`, add the import near the top:
+- [ ] **Step 5: Adopt it in `index.js`** - in `client/src/main/index.js`, add the import near the top:
 
 ```js
 import { schemeFor } from './serverScheme.js';
@@ -90,7 +90,7 @@ Replace the `open-login` handler body:
   });
 ```
 
-- [ ] **Step 6: Adopt it in `wsClient.js`** — in `client/src/main/wsClient.js`, add the import near the top:
+- [ ] **Step 6: Adopt it in `wsClient.js`** - in `client/src/main/wsClient.js`, add the import near the top:
 
 ```js
 import { schemeFor } from './serverScheme.js';
@@ -103,7 +103,7 @@ Replace the scheme line inside `connect()`:
     socket = new WebSocket(`${scheme}://${serverAddress}/`);
 ```
 
-- [ ] **Step 7: Register the new test file** — in `client/package.json`, add `src/main/serverScheme.test.js` to the `test` script's file list:
+- [ ] **Step 7: Register the new test file** - in `client/package.json`, add `src/main/serverScheme.test.js` to the `test` script's file list:
 
 ```json
     "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/renderer/src/resolveAppearance.test.js"
@@ -123,7 +123,7 @@ git commit -m "refactor(client): extract shared http/ws scheme rule into serverS
 
 ---
 
-### Task 2: `bot.js` — presence intent + `getUserProfile`
+### Task 2: `bot.js` - presence intent + `getUserProfile`
 
 **Files:**
 - Modify: `bot.js`
@@ -131,7 +131,7 @@ git commit -m "refactor(client): extract shared http/ws scheme rule into serverS
 **Interfaces:**
 - Produces: `getUserProfile(userId: string) -> { username: string, avatarURL: string, discordStatus: 'online'|'idle'|'dnd'|'offline', inTrackedChannel: boolean } | null`
 
-- [ ] **Step 1: Add the `GuildPresences` intent** — in `bot.js`, replace the `client` construction:
+- [ ] **Step 1: Add the `GuildPresences` intent** - in `bot.js`, replace the `client` construction:
 
 ```js
 const client = new Client({
@@ -144,20 +144,20 @@ const client = new Client({
 });
 ```
 
-- [ ] **Step 2: Warm the member/presence cache on ready** — replace the `ClientReady` handler:
+- [ ] **Step 2: Warm the member/presence cache on ready** - replace the `ClientReady` handler:
 
 ```js
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   // member.presence is only populated for cached members once GuildPresences
-  // is granted — a one-off REST guild.members.fetch(userId) lookup does not
+  // is granted - a one-off REST guild.members.fetch(userId) lookup does not
   // include presence data, so the whole guild is fetched once up front here.
   const guild = readyClient.guilds.cache.get(DISCORD_SERVER_ID);
   if (guild) await guild.members.fetch();
 });
 ```
 
-- [ ] **Step 3: Add `getUserProfile`** — directly below `getRoster`, add:
+- [ ] **Step 3: Add `getUserProfile`** - directly below `getRoster`, add:
 
 ```js
 export function getUserProfile(userId) {
@@ -173,10 +173,10 @@ export function getUserProfile(userId) {
 }
 ```
 
-- [ ] **Step 4: Verify existing tests still pass** — `gateway.js` imports from `bot.js`, so `gateway.test.js` transitively loads this module.
+- [ ] **Step 4: Verify existing tests still pass** - `gateway.js` imports from `bot.js`, so `gateway.test.js` transitively loads this module.
 
 Run: `node --test auth.test.js gateway.test.js`
-Expected: PASS (no assertions touch `bot.js` directly; module-load-time behavior — constructing `new Client(...)` — is unaffected by these changes)
+Expected: PASS (no assertions touch `bot.js` directly; module-load-time behavior - constructing `new Client(...)` - is unaffected by these changes)
 
 - [ ] **Step 5: Manual prerequisite reminder (not a code step)**
 
@@ -191,7 +191,7 @@ git commit -m "feat(bot): add GuildPresences intent and getUserProfile"
 
 ---
 
-### Task 3: `gateway.js` — `GET /api/me` endpoint (TDD)
+### Task 3: `gateway.js` - `GET /api/me` endpoint (TDD)
 
 **Files:**
 - Modify: `gateway.js`
@@ -201,7 +201,7 @@ git commit -m "feat(bot): add GuildPresences intent and getUserProfile"
 - Consumes: `verifySessionToken` (from `auth.js`, already imported), `getUserProfile` (Task 2)
 - Produces: `createMeHandler({ verifyToken, getProfile }) -> (req, res) => void`; wired as `GET /api/me` returning `{ userId, username, avatarURL, discordStatus, inTrackedChannel }` (200), `{ error: 'unauthorized' }` (401, missing/invalid token), or `{ error: 'not found' }` (404, no matching guild member)
 
-- [ ] **Step 1: Write the failing tests** — append to `gateway.test.js`:
+- [ ] **Step 1: Write the failing tests** - append to `gateway.test.js`:
 
 ```js
 import http from 'node:http';
@@ -261,9 +261,9 @@ test('GET /api/me returns 404 when the user has no matching guild member', async
 - [ ] **Step 2: Run to verify it fails**
 
 Run: `node --test gateway.test.js`
-Expected: FAIL — `createMeHandler is not a function` (or not exported)
+Expected: FAIL - `createMeHandler is not a function` (or not exported)
 
-- [ ] **Step 3: Implement `createMeHandler` and wire the route** — in `gateway.js`, add near `createAuthGate`:
+- [ ] **Step 3: Implement `createMeHandler` and wire the route** - in `gateway.js`, add near `createAuthGate`:
 
 ```js
 export function createMeHandler({ verifyToken, getProfile }) {
@@ -305,7 +305,7 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/auth/callback') return handleAuthCallback(req, res);
   if (url.pathname === '/api/me') return handleMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not found — use the discord-echo Electron client to view captions.');
+  res.end('Not found - use the discord-echo Electron client to view captions.');
 });
 ```
 
@@ -335,10 +335,10 @@ git commit -m "feat(gateway): add GET /api/me profile endpoint"
 
 **Interfaces:**
 - Consumes: `schemeFor` (Task 1)
-- Produces: `fetchProfile({ serverAddress: string, token: string }) -> Promise<{ userId, username, avatarURL, discordStatus, inTrackedChannel } | null>`; throws `AuthError` on a 401 response; a rejected promise (network failure — server unreachable) propagates uncaught, distinct from both of those.
+- Produces: `fetchProfile({ serverAddress: string, token: string }) -> Promise<{ userId, username, avatarURL, discordStatus, inTrackedChannel } | null>`; throws `AuthError` on a 401 response; a rejected promise (network failure - server unreachable) propagates uncaught, distinct from both of those.
 - Produces: `class AuthError extends Error {}`
 
-- [ ] **Step 1: Implement** — create `client/src/main/profileClient.js`:
+- [ ] **Step 1: Implement** - create `client/src/main/profileClient.js`:
 
 ```js
 import { schemeFor } from './serverScheme.js';
@@ -356,7 +356,7 @@ export async function fetchProfile({ serverAddress, token }) {
 }
 ```
 
-This module has no dedicated unit test — matches this project's existing precedent for thin main-process HTTP/IPC glue (e.g. `index.js` itself has none); it's exercised via Task 9's manual verification.
+This module has no dedicated unit test - matches this project's existing precedent for thin main-process HTTP/IPC glue (e.g. `index.js` itself has none); it's exercised via Task 9's manual verification.
 
 - [ ] **Step 2: Sanity-check nothing broke**
 
@@ -372,16 +372,16 @@ git commit -m "feat(client): profileClient.fetchProfile for the /api/me endpoint
 
 ---
 
-### Task 5: `index.js` — profile polling + IPC
+### Task 5: `index.js` - profile polling + IPC
 
 **Files:**
 - Modify: `client/src/main/index.js`
 
 **Interfaces:**
 - Consumes: `fetchProfile`, `AuthError` (Task 4)
-- Produces: IPC handler `get-profile` (pull) and pushed event `profile`, both carrying the shape `{ reachable: boolean, profile: { userId, username, avatarURL, discordStatus, inTrackedChannel } | null }`. A `get-profile` call can also resolve to `null` in the rare case it triggers an auth failure — see Step 2.
+- Produces: IPC handler `get-profile` (pull) and pushed event `profile`, both carrying the shape `{ reachable: boolean, profile: { userId, username, avatarURL, discordStatus, inTrackedChannel } | null }`. A `get-profile` call can also resolve to `null` in the rare case it triggers an auth failure - see Step 2.
 
-- [ ] **Step 1: Add the import and poll-state constant** — near the top of `client/src/main/index.js`, alongside the existing imports:
+- [ ] **Step 1: Add the import and poll-state constant** - near the top of `client/src/main/index.js`, alongside the existing imports:
 
 ```js
 import { fetchProfile, AuthError } from './profileClient.js';
@@ -394,7 +394,7 @@ const PROFILE_POLL_INTERVAL_MS = 15000;
 let profilePollTimer = null;
 ```
 
-- [ ] **Step 2: Add the polling functions** — directly below the existing `startWsClient` function, add:
+- [ ] **Step 2: Add the polling functions** - directly below the existing `startWsClient` function, add:
 
 ```js
 function handleProfileAuthFailure() {
@@ -477,7 +477,7 @@ In `createLauncherWindow`'s `closed` handler, stop polling when the launcher clo
   });
 ```
 
-- [ ] **Step 4: Add the `get-profile` IPC handler** — inside `registerIpcHandlers`, directly below the existing `get-state-snapshot` handler:
+- [ ] **Step 4: Add the `get-profile` IPC handler** - inside `registerIpcHandlers`, directly below the existing `get-state-snapshot` handler:
 
 ```js
   ipcMain.handle('get-profile', () => pollProfileOnce());
@@ -506,7 +506,7 @@ git commit -m "feat(client): poll /api/me and expose get-profile/profile IPC"
 - Consumes: `get-profile`/`profile` IPC channels (Task 5)
 - Produces: `window.api.getProfile() -> Promise<{reachable, profile} | null>`, `window.api.onProfile(callback) -> unsubscribe`
 
-- [ ] **Step 1: Add the two bridge methods** — in `client/src/preload/index.cjs`, add alongside the other `get*`/`on*` entries in the `contextBridge.exposeInMainWorld('api', {...})` object:
+- [ ] **Step 1: Add the two bridge methods** - in `client/src/preload/index.cjs`, add alongside the other `get*`/`on*` entries in the `contextBridge.exposeInMainWorld('api', {...})` object:
 
 ```js
   getProfile: () => ipcRenderer.invoke('get-profile'),
@@ -537,7 +537,7 @@ git commit -m "feat(client): expose getProfile/onProfile on the preload bridge"
 - Consumes: `profile: { userId, username, avatarURL, discordStatus, inTrackedChannel } | null`, `reachable: boolean` props (matches the shape produced by Task 5/6)
 - Produces: `export default function ProfileHeader({ profile, reachable })`, rendered by `LauncherView` (Task 8)
 
-- [ ] **Step 1: Implement the component** — create `client/src/renderer/src/ProfileHeader.jsx`:
+- [ ] **Step 1: Implement the component** - create `client/src/renderer/src/ProfileHeader.jsx`:
 
 ```jsx
 const STATUS_COLORS = {
@@ -584,7 +584,7 @@ export default function ProfileHeader({ profile, reachable }) {
 }
 ```
 
-- [ ] **Step 2: Add the CSS** — append to `client/src/renderer/src/assets/app.css`:
+- [ ] **Step 2: Add the CSS** - append to `client/src/renderer/src/assets/app.css`:
 
 ```css
 /* --- profile header (launcher, logged in) --- */
@@ -661,7 +661,7 @@ git commit -m "feat(client): add ProfileHeader component"
 
 ---
 
-### Task 8: `LauncherView.jsx` — login button & profile header wiring
+### Task 8: `LauncherView.jsx` - login button & profile header wiring
 
 **Files:**
 - Modify: `client/src/renderer/src/LauncherView.jsx`
@@ -669,7 +669,7 @@ git commit -m "feat(client): add ProfileHeader component"
 **Interfaces:**
 - Consumes: `ProfileHeader` (Task 7), `window.api.getProfile`/`onProfile` (Task 6), existing `window.api.openLogin`/`getSettings`/`startChatWindow`/`logout`
 
-- [ ] **Step 1: Replace the whole file** — `client/src/renderer/src/LauncherView.jsx`:
+- [ ] **Step 1: Replace the whole file** - `client/src/renderer/src/LauncherView.jsx`:
 
 ```jsx
 import { useEffect, useState } from 'react';
@@ -699,7 +699,7 @@ export default function LauncherView() {
           window.api.getSettings().then(setSettings);
           return;
         }
-        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed — please try again.');
+        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed - please try again.');
       }),
       window.api.onOpenSettings(() => setPage('settings')),
       window.api.onProfile((result) => setProfileState(result)),
@@ -712,7 +712,7 @@ export default function LauncherView() {
   function handleLogin() {
     setLoginError(null);
     window.api.openLogin(settings.serverAddress).catch(() =>
-      setLoginError('Could not reach the login page — check the server address in Settings and try again.'),
+      setLoginError('Could not reach the login page - check the server address in Settings and try again.'),
     );
   }
 
@@ -777,7 +777,7 @@ git commit -m "feat(client): login button when logged out, profile header when l
 
 - [ ] **Step 1: Confirm the Presence Intent prerequisite**
 
-Verify "Presence Intent" is toggled on for the bot application in the Discord Developer Portal (Bot tab → Privileged Gateway Intents). If not, toggle it now — the bot process needs a restart to pick it up.
+Verify "Presence Intent" is toggled on for the bot application in the Discord Developer Portal (Bot tab → Privileged Gateway Intents). If not, toggle it now - the bot process needs a restart to pick it up.
 
 - [ ] **Step 2: Launch the app and log in**
 

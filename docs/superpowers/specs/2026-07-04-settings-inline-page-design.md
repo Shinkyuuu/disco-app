@@ -1,4 +1,4 @@
-# Settings page: inline, no window resize — design
+# Settings page: inline, no window resize - design
 
 ## Purpose
 
@@ -19,7 +19,7 @@ resize behavior.
 1. **Remove the forced resize.** Delete the `useEffect` in `SettingsView.jsx`
    that calls `window.api.resizeWindow(640, 560)` on mount and
    `window.api.resizeWindow(440, 560)` on unmount. Settings renders at
-   whatever size the launcher window currently is — no IPC resize call at
+   whatever size the launcher window currently is - no IPC resize call at
    all on entering/leaving the page.
 
    The launcher window is already user-resizable (no `resizable: false` or
@@ -33,25 +33,25 @@ resize behavior.
    `padding: 32px 20px 20px`. `.settings-scroll` currently has flat
    `padding: 12px 14px` and no max-width, so it stretches edge-to-edge.
 
-   Change `.settings-scroll` to the same centering pattern — `margin: 0
-   auto`, 20px side padding — but with `max-width: 640px` instead of 480px
+   Change `.settings-scroll` to the same centering pattern - `margin: 0
+   auto`, 20px side padding - but with `max-width: 640px` instead of 480px
    (640 matches the width Settings used to force via resize, a known-good
    fit for the friend-card/slot-row layouts).
 
    Net effect: at the current default 440px window width, this is visually
-   a no-op difference from today (440 is under both caps — just a 20px
+   a no-op difference from today (440 is under both caps - just a 20px
    gutter instead of 14px). If the user drags the window wider, the main
    page stays capped/centered at 480px while Settings can use up to 640px
    before it also centers with margin.
 
-   `.settings-topbar` (the Back button bar) is unchanged — it's a toolbar
+   `.settings-topbar` (the Back button bar) is unchanged - it's a toolbar
    strip, not content, and wasn't part of the ask.
 
 ## Files touched
 
-- `client/src/renderer/src/settings/SettingsView.jsx` — remove the
+- `client/src/renderer/src/settings/SettingsView.jsx` - remove the
   resize-on-mount/unmount `useEffect`
-- `client/src/renderer/src/assets/app.css` — `.settings-scroll` gutter/cap
+- `client/src/renderer/src/assets/app.css` - `.settings-scroll` gutter/cap
   change
 
 ## Out of scope
@@ -60,14 +60,14 @@ resize behavior.
   440×560) or to any `resizable`/min-width constraints.
 - No change to `.settings-topbar`, `.settings-section`, or any of the
   section components' internal layout.
-- No change to the main page (`.launcher-content`) — already centered per
+- No change to the main page (`.launcher-content`) - already centered per
   the prior design doc.
 
 ## Verification
 
-- Manual: open Settings from the main page — window size does not change,
+- Manual: open Settings from the main page - window size does not change,
   no visible resize jump.
-- Manual: go Back to the main page — window size still unchanged.
+- Manual: go Back to the main page - window size still unchanged.
 - Manual: drag the launcher window wider, open Settings, confirm its
   content column grows up to ~640px before centering with margin (wider
   than the main page's 480px cap at the same window width).
