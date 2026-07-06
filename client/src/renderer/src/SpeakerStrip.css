@@ -15,87 +15,140 @@
 .speaker {
   position: relative;
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
 }
 
-/* Mute/deafen badge: emoji with a red diagonal slash drawn over it. */
-.speaker-badge {
-  position: absolute;
-  right: -2px;
-  bottom: 0;
+.speaker-username {
+  position: relative;
+  z-index: 1;
   font-size: 11px;
-  line-height: 1;
-  padding: 3px;
-  background: #1e1f24;
-  border-radius: 50%;
+  font-weight: 600;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   pointer-events: none;
 }
 
-.speaker--medium .speaker-badge {
+.speaker--medium .speaker-username {
+  font-size: 12px;
+  max-width: 100px;
+}
+
+.speaker--large .speaker-username {
   font-size: 13px;
+  max-width: 120px;
+}
+
+.speaker-username--silenced {
+  opacity: 0.35;
+}
+
+/* Status icon (muted/deafened) - SVG badge at lower-right of avatar. */
+.speaker-status-icon {
+  position: absolute;
+  right: -4px;
+  bottom: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+  background: #0d0e11;
+  border-radius: 50%;
+  color: #f04747;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1.5px #0d0e11;
+}
+
+.speaker--medium .speaker-status-icon {
+  width: 22px;
+  height: 22px;
   padding: 4px;
 }
 
-.speaker--large .speaker-badge {
-  font-size: 15px;
+.speaker--large .speaker-status-icon {
+  width: 26px;
+  height: 26px;
   padding: 5px;
 }
 
-.speaker-badge::after {
-  content: '';
-  position: absolute;
-  left: 15%;
-  top: 48%;
-  width: 70%;
-  height: 2px;
-  background: #f04747;
-  border-radius: 1px;
-  transform: rotate(-45deg);
-}
-
 .speaker-icon {
-  width: auto; /* keep the source aspect ratio — never force a square */
+  /* Fixed bounding box - object-fit scales the source image down to fit
+     inside it (no cropping, no distortion) whatever its native aspect ratio. */
+  object-fit: contain;
   transform: translateY(0) scale(1);
-  transition: transform 150ms ease-out, filter 150ms ease-out, height 150ms ease-out, margin-bottom 150ms ease-out;
+  transition: transform 150ms ease-out, filter 150ms ease-out, width 150ms ease-out, height 150ms ease-out, margin-bottom 150ms ease-out;
 }
 
-/* Sizes scale ~1.4x (medium) / ~1.8x (large) from the small baseline. The
-   chat window's height is resized in lockstep (main/index.js) so bigger
-   avatars are never clipped by the window's own bounds. */
+/* Sizes are picked to leave headroom, within .chat-header's fixed height
+   (main/index.js + app.css .chat-header--*), for the username label above
+   and the speaking-glow's bleed (scale/translateY/blur) - so neither ever
+   clips against the top of the window. */
 .speaker-icon--discord {
-  height: 48px;
+  width: 81px;
+  height: 81px;
   border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
   margin-bottom: 6px; /* floats just above the chat panel's top edge */
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
 }
 
 .speaker-icon--discord.speaker-icon--medium {
-  height: 67px;
+  width: 113px;
+  height: 113px;
   margin-bottom: 8px;
 }
 
 .speaker-icon--discord.speaker-icon--large {
-  height: 86px;
+  width: 144px;
+  height: 144px;
   margin-bottom: 10px;
 }
 
 .speaker-icon--custom {
-  height: 88px;
-  border-radius: 0; /* character art, not a round avatar — don't clip it */
-  margin-bottom: -14px; /* bottom overlaps behind the chat panel (higher z-index) — "peeking out" */
+  width: 96px; /* box is a portrait rectangle (0.8x height), not square */
+  height: 120px;
+  border-radius: 0; /* character art, not a round avatar - don't clip it */
+  margin-bottom: -11px; /* bottom overlaps behind the chat panel (higher z-index) - "peeking out" */
 }
 
 .speaker-icon--custom.speaker-icon--medium {
-  height: 123px;
-  margin-bottom: -20px;
+  width: 146px;
+  height: 183px;
+  margin-bottom: -18px;
 }
 
 .speaker-icon--custom.speaker-icon--large {
-  height: 158px;
-  margin-bottom: -26px;
+  width: 194px;
+  height: 243px;
+  margin-bottom: -24px;
 }
 
+.speaker-icon--discord.speaker-icon--silenced {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7)) brightness(0.3) saturate(0.3);
+  transform: translateY(10px) scale(0.93);
+}
+
+.speaker-icon--custom.speaker-icon--silenced {
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7)) brightness(0.3) saturate(0.3);
+  transform: translateY(10px) scale(0.93);
+}
+
+/* --glow-color is set inline per-speaker (SpeakerStrip.jsx) from their name
+   color; falls back to the old fixed blue when a speaker has none set. Scale
+   and blur are kept modest so the glow's bleed stays within the avatar's
+   reserved headroom instead of clipping against the window's top edge. */
 .speaker-icon--speaking {
-  transform: translateY(-4px) scale(1.08);
-  filter: drop-shadow(0 6px 8px rgba(255, 255, 255, 0.6)) drop-shadow(0 0 12px rgba(88, 166, 255, 0.8));
+  transform: translateY(-2px) scale(1.05);
+  filter:
+    drop-shadow(0 3px 4px rgba(255, 255, 255, 0.5))
+    drop-shadow(0 0 8px color-mix(in srgb, var(--glow-color, #58a6ff) 80%, transparent));
 }

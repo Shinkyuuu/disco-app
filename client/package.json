@@ -16,11 +16,12 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/renderer/src/resolveAppearance.test.js"
+    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/renderer/src/resolveAppearance.test.js src/renderer/src/typewriter.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
     "electron-store": "^11.0.2",
     "ogl": "^1.0.11",
     "ws": "^8.21.0"
