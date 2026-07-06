@@ -6,8 +6,10 @@ import { store } from './store.js';
 import { createWsClient } from './wsClient.js';
 import { schemeFor } from './serverScheme.js';
 import { fetchProfile, AuthError } from './profileClient.js';
+import { isRetryableAuthFailure } from './authFailure.js';
 import {
   reconcileFriendProfiles,
+  seedDefaultProfileColors,
   resolveSpeakerProfile,
   getDefaultProfiles,
   getFriendProfiles,
@@ -20,15 +22,19 @@ import {
 } from './profiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROTOCOL = 'discord-echo';
+const PROTOCOL = 'disco';
+// electron-builder applies build/icon.ico automatically for packaged builds -
+// this is only needed so `npm run dev` also shows the real icon (taskbar +
+// window), not the default Electron logo.
+const ICON_PATH = path.join(app.getAppPath(), 'resources', 'icon.png');
 
 // The header strip's height must grow with avatar size or larger icons get
 // clipped by the window's own bounds (Electron windows clip all content to
 // their rect, regardless of CSS overflow). Panel height stays constant across
-// sizes so the message log doesn't shrink — only the window grows upward.
+// sizes so the message log doesn't shrink - only the window grows upward.
 const CHAT_WINDOW_WIDTH = 480;
 const CHAT_PANEL_HEIGHT = 324;
-const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 96, medium: 136, large: 172 };
+const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 158, medium: 221, large: 281 };
 const MIN_CHAT_PANEL_HEIGHT = 100;
 
 function chatWindowHeightFor(avatarSize) {
@@ -42,14 +48,14 @@ let pendingAuthError = null;
 let deferredOpenUrl = null;
 
 let wsClient = null;
-const PROFILE_POLL_INTERVAL_MS = 15000;
+const PROFILE_POLL_INTERVAL_MS = 5000;
 let profilePollTimer = null;
 let currentRoster = [];
-const messageLog = []; // [{ speakerId, username, avatarURL, text, isFinal }] — finalized entries only, in order, capped at 1000 (see the 'transcript' handler below)
+const messageLog = []; // [{ speakerId, username, avatarURL, text, isFinal }] - finalized entries only, in order, capped at 1000 (see the 'transcript' handler below)
 
 // Named generically, but every channel sent through here (roster/speaking/transcript/
-// ws-connection-state) is only ever consumed by ChatView — LauncherView never subscribes
-// to any of them — so this targets the chat window only, not every open window.
+// ws-connection-state) is only ever consumed by ChatView - LauncherView never subscribes
+// to any of them - so this targets the chat window only, not every open window.
 function broadcastToRenderers(channel, payload) {
   if (chatWindow) chatWindow.webContents.send(channel, payload);
 }
@@ -58,7 +64,7 @@ const UNREACHABLE_THRESHOLD = 3;
 let consecutiveFailures = 0;
 
 // Last-known connection state, included in the pull snapshot so a chat window
-// that opens (or re-opens) after a transient event still learns the truth —
+// that opens (or re-opens) after a transient event still learns the truth -
 // push events alone are lost if they fire before the renderer subscribes.
 let lastConnectionState = { status: 'connected' };
 
@@ -87,13 +93,13 @@ function startWsClient() {
   wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
   wsClient.on('transcript', (event) => {
     if (event.isFinal) {
-      // receivedAt drives the renderer's 5-second disappearing-chat timer —
+      // receivedAt drives the renderer's 5-second disappearing-chat timer -
       // stamped once here so live push and a later state-snapshot pull agree
       // on the same value (not a fresh Date.now() each time it's read).
       const finalized = { ...event, receivedAt: Date.now() };
       messageLog.push(finalized);
       // Bound the array a very long session's worth of finalized lines could otherwise grow
-      // to unboundedly — this is what gets structured-clone'd over IPC on every chat-window
+      // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
       // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
       // 1000 lines is far more scrollback than this product's use case (a live
       // conversation, not an archive) ever needs to show on reopen.
@@ -111,7 +117,7 @@ function startWsClient() {
     setConnectionState({ status: 'auth-failed', reason });
     wsClient.close();
     wsClient = null;
-    store.delete('sessionToken');
+    if (!isRetryableAuthFailure(reason)) store.delete('sessionToken');
   });
   wsClient.on('close', (code, reason) => {
     consecutiveFailures += 1;
@@ -172,7 +178,8 @@ function createChatWindow() {
     minWidth: 300,
     minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT,
     frame: false,
-    // Transparent so the header strip above the chat panel is invisible —
+    icon: ICON_PATH,
+    // Transparent so the header strip above the chat panel is invisible -
     // speaker avatars render there and appear to float above the window.
     transparent: true,
     alwaysOnTop: true,
@@ -251,7 +258,7 @@ function handleDeepLink(url) {
   if (error) deliverAuthError(error);
 }
 
-// macOS: open-url can fire before app.whenReady() — register at top level, buffer until ready.
+// macOS: open-url can fire before app.whenReady() - register at top level, buffer until ready.
 app.on('open-url', (event, url) => {
   event.preventDefault();
   if (app.isReady()) {
@@ -277,6 +284,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     reconcileFriendProfiles(store);
+    seedDefaultProfileColors(store);
     registerIpcHandlers();
     createLauncherWindow();
     if (store.get('sessionToken')) startProfilePolling();
@@ -294,6 +302,7 @@ function registerIpcHandlers() {
     serverAddress: store.get('serverAddress'),
     avatarMode: store.get('avatarMode'),
     avatarSize: store.get('avatarSize'),
+    chatSize: store.get('chatSize'),
     chatOpacity: store.get('chatOpacity'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
@@ -303,7 +312,7 @@ function registerIpcHandlers() {
     for (const [key, value] of Object.entries(partial)) {
       store.set(key, value);
     }
-    // Resize the already-open chat window immediately — otherwise a larger
+    // Resize the already-open chat window immediately - otherwise a larger
     // avatar size wouldn't take visual effect (or would clip) until the next
     // time the window happens to be recreated.
     if ('avatarSize' in partial && chatWindow) {
@@ -317,7 +326,7 @@ function registerIpcHandlers() {
     createChatWindow();
   });
 
-  // Pulled by the chat window once its listeners are mounted — a pushed
+  // Pulled by the chat window once its listeners are mounted - a pushed
   // snapshot can fire before the renderer subscribes and be lost.
   ipcMain.handle('get-state-snapshot', () => ({
     roster: currentRoster,
@@ -337,7 +346,7 @@ function registerIpcHandlers() {
     }
   });
 
-  // Generic window-chrome controls for the custom (frame: false) title bar —
+  // Generic window-chrome controls for the custom (frame: false) title bar -
   // targets whichever window's renderer invoked them, not a hardcoded window,
   // so the same preload API works for any frameless window.
   ipcMain.handle('window-minimize', (event) => {
@@ -369,7 +378,7 @@ function registerIpcHandlers() {
     const dataUrl = await pickAvatarImage({ scope: 'friend', id: userId, kind });
     // A picked image alone should make this user "have a profile" so
     // getFriendProfiles lists them (and the preview persists) even before any
-    // color is set — mirrors reconciliation for hand-created folders.
+    // color is set - mirrors reconciliation for hand-created folders.
     if (dataUrl) addFriendProfile(store, userId);
     return dataUrl;
   });
@@ -408,9 +417,10 @@ function rendererUrl(view) {
 
 function createLauncherWindow() {
   launcherWindow = new BrowserWindow({
-    width: 360,
-    height: 480,
-    frame: false, // no OS title/menu bar — the renderer draws its own header + menu
+    width: 440,
+    height: 560,
+    frame: false, // no OS title/menu bar - the renderer draws its own header + menu
+    icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
