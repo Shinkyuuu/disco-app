@@ -4,6 +4,7 @@ import SettingsView from './settings/SettingsView';
 import ProfileHeader from './ProfileHeader';
 import BorderGlow from './BorderGlow';
 import Aurora from './Aurora';
+import backgroundImage from './assets/background.png';
 
 const AURORA_COLOR_STOPS = ['#3b82f6', '#7C3AED', '#3b82f6'];
 
@@ -109,7 +110,7 @@ export default function LauncherView() {
           window.api.getSettings().then(setSettings);
           return;
         }
-        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed — please try again.');
+        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed - please try again.');
       }),
       window.api.onOpenSettings(() => setPage('settings')),
       window.api.onProfile((result) => setProfileState(result)),
@@ -122,7 +123,7 @@ export default function LauncherView() {
   function handleLogin() {
     setLoginError(null);
     window.api.openLogin(settings.serverAddress).catch(() =>
-      setLoginError('Could not reach the login page — check the server address in Settings and try again.'),
+      setLoginError('Could not reach the login page - check the server address in Settings and try again.'),
     );
   }
 
@@ -136,8 +137,9 @@ export default function LauncherView() {
     <div className="launcher-root">
       <TitleBar title="Disco" />
       <div className="aurora-stage">
+        {page !== 'settings' && <img className="launcher-bg-image" src={backgroundImage} alt="" />}
         <div className="aurora-backdrop">
-          <Aurora colorStops={AURORA_COLOR_STOPS} />
+          <Aurora colorStops={AURORA_COLOR_STOPS} speed={0.4} />
         </div>
         {page === 'settings' ? (
           <SettingsView

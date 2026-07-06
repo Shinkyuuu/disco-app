@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import titlebarIcon from './assets/titlebar-icon.png';
 
 function MinimizeIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true">
       <rect x="0" y="4.5" width="10" height="1" fill="currentColor" />
     </svg>
   );
@@ -10,7 +11,7 @@ function MinimizeIcon() {
 
 function MaximizeIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true">
       <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" />
     </svg>
   );
@@ -18,9 +19,9 @@ function MaximizeIcon() {
 
 function RestoreIcon() {
   // Two outline squares (no fill mask) so it reads correctly against any
-  // button background — hover, non-hover, or the close button's red.
+  // button background - hover, non-hover, or the close button's red.
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true">
       <rect x="2.5" y="0.5" width="7" height="7" fill="none" stroke="currentColor" />
       <rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" />
     </svg>
@@ -29,7 +30,7 @@ function RestoreIcon() {
 
 function CloseIcon() {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+    <svg width="11" height="11" viewBox="0 0 10 10" aria-hidden="true">
       <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" />
       <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" />
     </svg>
@@ -49,7 +50,10 @@ export default function TitleBar({ title }) {
 
   return (
     <div className="title-bar" onDoubleClick={() => window.api.windowToggleMaximize()}>
-      <span className="title-bar-text">{title}</span>
+      <div className="title-bar-title">
+        <img src={titlebarIcon} alt="" className="title-bar-icon" />
+        <span className="title-bar-text">{title}</span>
+      </div>
       <div className="title-bar-controls">
         <button aria-label="Minimize" className="title-bar-button" onClick={() => window.api.windowMinimize()}>
           <MinimizeIcon />
