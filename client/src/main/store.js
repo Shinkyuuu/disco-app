@@ -5,6 +5,13 @@ export const store = new Store({
     serverAddress: 'localhost:3000',
     avatarMode: 'discord',
     avatarSize: 'small',
+    chatSize: 'medium',
+    chatOpacity: 1,
+    chatWindowWidth: 480,
+    chatWindowPanelHeight: 324,
     sessionToken: null,
+    loggedInUserId: null,
+    defaultProfiles: Array.from({ length: 10 }, () => ({ usernameColor: null, chatColor: null })),
+    friendProfiles: {},
   },
 });

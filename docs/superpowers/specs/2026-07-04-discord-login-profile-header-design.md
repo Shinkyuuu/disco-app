@@ -1,42 +1,42 @@
-# Discord Login Button & Profile Header — Design
+# Discord Login Button & Profile Header - Design
 
 **Status:** Approved, ready for implementation planning.
 **Scope:** Backend (`bot.js`, `gateway.js`) + client (`main`, `preload`, `renderer`). No change to `auth.js`.
 
 ## 1. Goal
 
-The launcher window currently has no explicit login affordance — clicking "Start Chat
+The launcher window currently has no explicit login affordance - clicking "Start Chat
 Window" while logged out silently kicks off OAuth. This adds:
 
 - A dedicated **"Login to Discord"** button, shown instead of "Start Chat Window" while
   logged out.
 - Once logged in, a **profile header** near the top of the launcher showing: avatar,
   username, user_id, and three independent status signals:
-  1. **Discord presence** (online/idle/dnd/offline) — the user's real Discord status.
-  2. **In tracked voice channel** — whether this user is currently in the voice channel
+  1. **Discord presence** (online/idle/dnd/offline) - the user's real Discord status.
+  2. **In tracked voice channel** - whether this user is currently in the voice channel
      the bot is captioning.
-  3. **Server reachability** — whether the client can currently reach the discord-echo
+  3. **Server reachability** - whether the client can currently reach the discord-echo
      server at all.
 
 ## 2. Non-goals
 
 - Any change to `auth.js` or the OAuth flow itself.
-- Any change to when/how the caption WebSocket (`wsClient.js`) connects — it still opens
+- Any change to when/how the caption WebSocket (`wsClient.js`) connects - it still opens
   lazily on "Start Chat Window", exactly as today.
-- Live-updating the profile the instant something changes server-side — a 15s poll is
+- Live-updating the profile the instant something changes server-side - a 15s poll is
   fresh enough for a screen whose job is "log in, then start the chat window."
-- Persisting username/avatar/status in `electron-store` — always fetched fresh.
+- Persisting username/avatar/status in `electron-store` - always fetched fresh.
 
 ## 3. Key architectural decision: identity source
 
 Display identity (username, avatar) comes from the **bot's guild member cache**, not
 from the OAuth `/users/@me` response. This matches how the app already resolves
-speaker/roster identity (`bot.js`'s `resolveSpeaker`/`buildRoster`) — one source of
+speaker/roster identity (`bot.js`'s `resolveSpeaker`/`buildRoster`) - one source of
 truth for "what does this Discord user look like," not two. `auth.js` continues to only
 resolve and hand back a Discord user_id, unchanged.
 
 Consequence: if the logged-in user isn't a member of `DISCORD_SERVER_ID` (left the
-server, or never joined), there's no member record to read — `getUserProfile` returns
+server, or never joined), there's no member record to read - `getUserProfile` returns
 `null` and the client shows a "not found in server" fallback state instead of a profile
 card.
 
@@ -46,10 +46,10 @@ card.
 
 - Add `GatewayIntentBits.GuildPresences` to the client's intents (alongside `Guilds`,
   `GuildVoiceStates`, `GuildMembers`). **Requires a manual step**: enabling "Presence
-  Intent" for this bot application in the Discord Developer Portal — the code change
+  Intent" for this bot application in the Discord Developer Portal - the code change
   alone isn't sufficient. This is a prerequisite to implementation, not something the
   code can do.
-- On `Events.ClientReady`, call `guild.members.fetch()` once to warm the member cache —
+- On `Events.ClientReady`, call `guild.members.fetch()` once to warm the member cache -
   `member.presence` is only populated for cached members once the intent is granted; a
   one-off REST `guild.members.fetch(userId)` lookup does not include presence data.
 - New export:
@@ -67,7 +67,7 @@ card.
   }
   ```
   Deliberately reads only from the cache (no `await fetch`) so this stays fast and
-  synchronous-feeling for a poll endpoint — a member who isn't cached yet is treated the
+  synchronous-feeling for a poll endpoint - a member who isn't cached yet is treated the
   same as "not in server," consistent with presence only ever being available for cached
   members anyway.
 
@@ -78,11 +78,11 @@ card.
   WS auth gate) to resolve `userId`; `401` if missing/invalid.
 - Calls `getUserProfile(userId)`; `404` if `null`; otherwise `200` with
   `{ userId, ...profile }` as JSON.
-- Structured as an injectable factory — `createMeHandler({ verifyToken, getProfile })`
-  — mirroring `createAuthGate`, so it's unit-testable with fakes exactly like
+- Structured as an injectable factory - `createMeHandler({ verifyToken, getProfile })`
+  - mirroring `createAuthGate`, so it's unit-testable with fakes exactly like
   `gateway.test.js` does today, without a real Discord connection.
 
-## 5. Client — main process
+## 5. Client - main process
 
 ### 5.1 Shared scheme helper
 
@@ -126,7 +126,7 @@ export async function fetchProfile({ serverAddress, token }) {
   guessing from silence. On `AuthError` (401), mirrors the existing WS `auth-failed`
   handling: clears `sessionToken`/`loggedInUserId` from the store and notifies the
   renderer so it falls back to the logged-out view.
-- New `ipcMain.handle('get-profile', ...)` — a pull, like `get-settings`, giving
+- New `ipcMain.handle('get-profile', ...)` - a pull, like `get-settings`, giving
   `LauncherView` an immediate value on mount instead of waiting for the first poll tick.
 
 ### 5.4 `preload/index.cjs`
@@ -134,7 +134,7 @@ export async function fetchProfile({ serverAddress, token }) {
 - `getProfile()` → `ipcRenderer.invoke('get-profile')`.
 - `onProfile()` → `subscribe('profile', ...)`, following the existing pattern.
 
-## 6. Client — renderer
+## 6. Client - renderer
 
 ### 6.1 New `ProfileHeader.jsx`
 
@@ -142,7 +142,7 @@ Props: `{ userId, username, avatarURL, discordStatus, inTrackedChannel, reachabl
 Renders:
 - Avatar image, username, and `userId` as smaller secondary text beneath it.
 - A colored status dot for `discordStatus` (green=online, yellow=idle, red=dnd,
-  gray=offline/unknown) — standard Discord status-dot convention.
+  gray=offline/unknown) - standard Discord status-dot convention.
 - A short "In voice channel" / "Not in voice channel" badge from `inTrackedChannel`.
 - A short "Connected" / "Unreachable" indicator from `reachable`.
 
@@ -162,11 +162,11 @@ card.
 ## 7. Testing scope
 
 - `gateway.js`'s new `/api/me` handler: unit-tested with injected fakes for
-  valid/expired/missing token and found/not-found profile — same pattern as
+  valid/expired/missing token and found/not-found profile - same pattern as
   `gateway.test.js`'s existing `createAuthGate` tests.
 - `serverScheme.js`: focused `node:test` coverage (bare `host:port` vs hosted hostname),
   matching how `protocolUrl.test.js` tests small pure functions today.
-- `bot.js`'s `getUserProfile`: not unit tested — matches existing precedent (`bot.js` has
+- `bot.js`'s `getUserProfile`: not unit tested - matches existing precedent (`bot.js` has
   no unit tests; it's a thin Discord.js wrapper verified manually).
 - Manual verification (via the `run` skill): log in and confirm the profile header
   appears with correct avatar/username/user_id; join/leave the tracked voice channel and
@@ -181,15 +181,15 @@ card.
 - `client/src/renderer/src/ProfileHeader.jsx`
 
 **Modify:**
-- `bot.js` — `GuildPresences` intent, member-cache warm-up on ready, new
+- `bot.js` - `GuildPresences` intent, member-cache warm-up on ready, new
   `getUserProfile` export.
-- `gateway.js` — new `/api/me` route, `createMeHandler` factory.
-- `gateway.test.js` — new tests for `createMeHandler`.
-- `client/src/main/index.js` — `pollProfile` loop, `get-profile` IPC handler, uses
+- `gateway.js` - new `/api/me` route, `createMeHandler` factory.
+- `gateway.test.js` - new tests for `createMeHandler`.
+- `client/src/main/index.js` - `pollProfile` loop, `get-profile` IPC handler, uses
   `serverScheme.js` in `openLogin`.
-- `client/src/main/wsClient.js` — uses `serverScheme.js` instead of its own inline rule.
-- `client/src/preload/index.cjs` — `getProfile`/`onProfile`.
-- `client/src/renderer/src/LauncherView.jsx` — login-button-only logged-out state,
+- `client/src/main/wsClient.js` - uses `serverScheme.js` instead of its own inline rule.
+- `client/src/preload/index.cjs` - `getProfile`/`onProfile`.
+- `client/src/renderer/src/LauncherView.jsx` - login-button-only logged-out state,
   `ProfileHeader` when logged in.
 
 **Manual prerequisite (not code):** enable "Presence Intent" for the bot application in

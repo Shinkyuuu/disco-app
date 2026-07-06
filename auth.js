@@ -70,12 +70,12 @@ export async function handleAuthCallback(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT_NUMBER}`);
 
   // Discord redirects here with ?error=access_denied (standard OAuth2 behavior) when the
-  // user declines on the consent screen — forward it through the same deep-link mechanism
+  // user declines on the consent screen - forward it through the same deep-link mechanism
   // as a success, carrying an error instead of a token, so the Electron app can show a
   // real in-app retry state instead of leaving the user stuck on a bare browser page.
   const oauthError = url.searchParams.get('error');
   if (oauthError) {
-    res.writeHead(302, { Location: `discord-echo://auth?error=${encodeURIComponent(oauthError)}` });
+    res.writeHead(302, { Location: `disco://auth?error=${encodeURIComponent(oauthError)}` });
     res.end();
     return;
   }
@@ -91,11 +91,13 @@ export async function handleAuthCallback(req, res) {
     const { access_token } = await exchangeCodeForToken(code);
     const userId = await fetchDiscordUserId(access_token);
     const sessionToken = createSessionToken(userId);
-    res.writeHead(302, { Location: `discord-echo://auth?token=${sessionToken}` });
+    res.writeHead(302, {
+      Location: `disco://auth?token=${sessionToken}&userId=${encodeURIComponent(userId)}`,
+    });
     res.end();
   } catch (err) {
     console.error('OAuth callback failed:', err);
-    res.writeHead(302, { Location: `discord-echo://auth?error=callback_failed` });
+    res.writeHead(302, { Location: `disco://auth?error=callback_failed` });
     res.end();
   }
 }
