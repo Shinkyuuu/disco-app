@@ -233,54 +233,64 @@ async function handleCaptionsStart(interaction) {
     return;
   }
 
-  await interaction.reply(
-    `Joining **${channel.name}**`,
-  );
+  // Reserve this guild's slot synchronously, before any `await` below, so a second
+  // concurrent /disco join (in this guild, or racing the global cap) can't pass the
+  // checks above before this one claims the slot.
+  createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener: null });
 
-  await ensureMembersFetched(channel.guild);
+  try {
+    await interaction.reply(
+      `Joining **${channel.name}**`,
+    );
 
-  const connection = joinVoiceChannel({
-    channelId: channel.id,
-    guildId,
-    adapterCreator: channel.guild.voiceAdapterCreator,
-  });
+    await ensureMembersFetched(channel.guild);
 
-  await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
+    const connection = joinVoiceChannel({
+      channelId: channel.id,
+      guildId,
+      adapterCreator: channel.guild.voiceAdapterCreator,
+    });
 
-  const roster = buildRoster(channel);
+    await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
-  const voiceStateListener = (oldState, newState) => {
-    const session = getSession(guildId);
-    if (!session) return;
-    if (oldState.channelId !== session.channelId && newState.channelId !== session.channelId) return;
-    const membershipChanged = oldState.channelId !== newState.channelId;
-    if (membershipChanged && oldState.id === session.ownerId && oldState.channelId === session.channelId) {
-      stopCaptions(guildId);
-      return;
-    }
-    const muteOrDeafChanged = oldState.mute !== newState.mute || oldState.deaf !== newState.deaf;
-    if (!membershipChanged && !muteOrDeafChanged) return; // ignore e.g. video/stream toggles
-    const trackedChannelObj = client.channels.cache.get(session.channelId);
-    if (!trackedChannelObj) return;
-    const updatedRoster = buildRoster(trackedChannelObj);
-    setRoster(guildId, updatedRoster);
-    broadcastToSession(guildId, { type: 'roster', channelId: session.channelId, members: updatedRoster });
-  };
+    const roster = buildRoster(channel);
 
-  createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener });
-  setRoster(guildId, roster);
-  broadcastToSession(guildId, { type: 'roster', channelId: channel.id, members: roster });
+    const voiceStateListener = (oldState, newState) => {
+      const session = getSession(guildId);
+      if (!session) return;
+      if (oldState.channelId !== session.channelId && newState.channelId !== session.channelId) return;
+      const membershipChanged = oldState.channelId !== newState.channelId;
+      if (membershipChanged && oldState.id === session.ownerId && oldState.channelId === session.channelId) {
+        stopCaptions(guildId);
+        return;
+      }
+      const muteOrDeafChanged = oldState.mute !== newState.mute || oldState.deaf !== newState.deaf;
+      if (!membershipChanged && !muteOrDeafChanged) return; // ignore e.g. video/stream toggles
+      const trackedChannelObj = client.channels.cache.get(session.channelId);
+      if (!trackedChannelObj) return;
+      const updatedRoster = buildRoster(trackedChannelObj);
+      setRoster(guildId, updatedRoster);
+      broadcastToSession(guildId, { type: 'roster', channelId: session.channelId, members: updatedRoster });
+    };
 
-  client.on(Events.VoiceStateUpdate, voiceStateListener);
+    createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener });
+    setRoster(guildId, roster);
+    broadcastToSession(guildId, { type: 'roster', channelId: channel.id, members: roster });
 
-  connection.receiver.speaking.on('start', (userId) => {
-    broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: true });
-    startTranscribing(guildId, channel.id, connection, userId);
-  });
-  // SpeakingMap emits 'end' (not 'stop') ~100ms after a user's last audio packet.
-  connection.receiver.speaking.on('end', (userId) => {
-    broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: false });
-  });
+    client.on(Events.VoiceStateUpdate, voiceStateListener);
+
+    connection.receiver.speaking.on('start', (userId) => {
+      broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: true });
+      startTranscribing(guildId, channel.id, connection, userId);
+    });
+    // SpeakingMap emits 'end' (not 'stop') ~100ms after a user's last audio packet.
+    connection.receiver.speaking.on('end', (userId) => {
+      broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: false });
+    });
+  } catch (err) {
+    endSession(guildId);
+    throw err;
+  }
 }
 
 function stopCaptions(guildId) {
