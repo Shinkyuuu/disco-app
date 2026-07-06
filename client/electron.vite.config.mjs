@@ -11,7 +11,7 @@ export default defineConfig({
           index: resolve('src/preload/index.cjs')
         },
         // Preloads run sandboxed (we never set sandbox: false), and sandboxed
-        // preloads must be CommonJS — override the package-level "type": "module".
+        // preloads must be CommonJS - override the package-level "type": "module".
         output: {
           format: 'cjs'
         }
