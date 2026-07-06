@@ -23,19 +23,23 @@ const { DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DISCORD_SERVER_ID, DEEPGRAM_A
 const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
 
 const commands = [
-  { name: 'ping', description: 'Replies with Pong!' },
   {
-    name: 'captions',
+    name: 'disco',
     description: 'Manage live captions for this voice channel',
     options: [
       {
-        name: 'start',
-        description: 'Join your voice channel and start live captions',
+        name: 'join',
+        description: 'Joins voice channel',
         type: ApplicationCommandOptionType.Subcommand,
       },
       {
-        name: 'stop',
-        description: 'Stop captions and leave the voice channel',
+        name: 'leave',
+        description: 'Leaves voice channel',
+        type: ApplicationCommandOptionType.Subcommand,
+      },
+      {
+        name: 'ping',
+        description: 'pong!',
         type: ApplicationCommandOptionType.Subcommand,
       },
     ],
@@ -54,7 +58,7 @@ const client = new Client({
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`);
   // member.presence is only populated for cached members once GuildPresences
-  // is granted — a one-off REST guild.members.fetch(userId) lookup does not
+  // is granted - a one-off REST guild.members.fetch(userId) lookup does not
   // include presence data, so the whole guild is fetched once up front here.
   const guild = readyClient.guilds.cache.get(DISCORD_SERVER_ID);
   if (guild) {
@@ -75,7 +79,7 @@ async function resolveSpeaker(guildId, userId) {
 // key: `${guildId}:${userId}` -> { opusStream, dgSocket } | null (reserved while resolving speaker)
 const activeStreams = new Map();
 
-let trackedChannel = null; // { guildId, channelId } | null — single global session
+let trackedChannel = null; // { guildId, channelId, ownerId } | null - single global session
 let roster = []; // [{ speakerId, username, avatarURL }]
 
 export function isUserInTrackedChannel(userId) {
@@ -101,14 +105,16 @@ export function getUserProfile(userId) {
 }
 
 function buildRoster(channel) {
-  return channel.members.map((member) => ({
-    speakerId: member.id,
-    username: member.displayName,
-    avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
-    // .mute/.deaf combine self- and server- states (either counts)
-    isMuted: member.voice.mute ?? false,
-    isDeafened: member.voice.deaf ?? false,
-  }));
+  return channel.members
+    .filter((member) => !member.user.bot)
+    .map((member) => ({
+      speakerId: member.id,
+      username: member.displayName,
+      avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
+      // .mute/.deaf combine self- and server- states (either counts)
+      isMuted: member.voice.mute ?? false,
+      isDeafened: member.voice.deaf ?? false,
+    }));
 }
 
 let voiceStateListener = null;
@@ -120,7 +126,7 @@ async function startTranscribing(guildId, connection, userId) {
 
   const speaker = await resolveSpeaker(guildId, userId);
 
-  // /captions stop may have run while the attribution lookup above was in flight.
+  // /disco leave may have run while the attribution lookup above was in flight.
   if (!activeStreams.has(key)) return;
 
   const opusStream = connection.receiver.subscribe(userId, {
@@ -194,12 +200,12 @@ function stopTranscribing(guildId) {
 async function handleCaptionsStart(interaction) {
   const channel = interaction.member.voice.channel;
   if (!channel) {
-    await interaction.reply({ content: 'Join a voice channel first.', ephemeral: true });
+    await interaction.reply({ content: 'Invoker must be injoice channel.', ephemeral: true });
     return;
   }
 
   await interaction.reply(
-    `Joining **${channel.name}** — open the overlay at http://localhost:${PORT_NUMBER} to see captions.`,
+    `Joining **${channel.name}**`,
   );
 
   const connection = joinVoiceChannel({
@@ -210,7 +216,7 @@ async function handleCaptionsStart(interaction) {
 
   await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
 
-  trackedChannel = { guildId: channel.guild.id, channelId: channel.id };
+  trackedChannel = { guildId: channel.guild.id, channelId: channel.id, ownerId: interaction.user.id };
 
   roster = buildRoster(channel);
   broadcast({ type: 'roster', members: roster });
@@ -218,6 +224,10 @@ async function handleCaptionsStart(interaction) {
   voiceStateListener = (oldState, newState) => {
     if (oldState.channelId !== trackedChannel.channelId && newState.channelId !== trackedChannel.channelId) return;
     const membershipChanged = oldState.channelId !== newState.channelId;
+    if (membershipChanged && oldState.id === trackedChannel.ownerId && oldState.channelId === trackedChannel.channelId) {
+      stopCaptions(trackedChannel.guildId);
+      return;
+    }
     const muteOrDeafChanged = oldState.mute !== newState.mute || oldState.deaf !== newState.deaf;
     if (!membershipChanged && !muteOrDeafChanged) return; // ignore e.g. video/stream toggles
     const trackedChannelObj = client.channels.cache.get(trackedChannel.channelId);
@@ -237,14 +247,11 @@ async function handleCaptionsStart(interaction) {
   });
 }
 
-async function handleCaptionsStop(interaction) {
-  const connection = getVoiceConnection(interaction.guild.id);
-  if (!connection) {
-    await interaction.reply({ content: 'Not currently in a voice channel.', ephemeral: true });
-    return;
-  }
+function stopCaptions(guildId) {
+  const connection = getVoiceConnection(guildId);
+  if (!connection) return;
 
-  stopTranscribing(interaction.guild.id);
+  stopTranscribing(guildId);
   trackedChannel = null;
   roster = [];
   if (voiceStateListener) {
@@ -252,20 +259,29 @@ async function handleCaptionsStop(interaction) {
     voiceStateListener = null;
   }
   connection.destroy();
-  await interaction.reply('Captions stopped, left the voice channel.');
+}
+
+async function handleCaptionsStop(interaction) {
+  if (!getVoiceConnection(interaction.guild.id)) {
+    await interaction.reply({ content: 'Not currently in a voice channel.', ephemeral: true });
+    return;
+  }
+
+  stopCaptions(interaction.guild.id);
+  await interaction.reply('Listening stopped, left the voice channel.');
 }
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.commandName === 'ping') {
-    await interaction.reply('Pong!');
-  } else if (interaction.commandName === 'captions') {
+  if (interaction.commandName === 'disco') {
     const subcommand = interaction.options.getSubcommand();
-    if (subcommand === 'start') {
+    if (subcommand === 'join') {
       await handleCaptionsStart(interaction);
-    } else if (subcommand === 'stop') {
+    } else if (subcommand === 'leave') {
       await handleCaptionsStop(interaction);
+    } else if (subcommand === 'ping') {
+      await interaction.reply('Pong!');
     }
   }
 });
