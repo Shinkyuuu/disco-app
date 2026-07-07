@@ -20,7 +20,10 @@ import { broadcastToSession, PORT_NUMBER } from './gateway.js';
 import { createSession, endSession, getSession, setRoster, activeSessionCount } from './sessionRegistry.js';
 
 const { DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DEEPGRAM_API_KEY } = process.env;
-const MAX_ACTIVE_SESSIONS = Number(process.env.MAX_ACTIVE_SESSIONS) || 5;
+const rawMaxActiveSessions = process.env.MAX_ACTIVE_SESSIONS;
+const MAX_ACTIVE_SESSIONS = rawMaxActiveSessions === undefined || rawMaxActiveSessions === ''
+  ? 5
+  : Number(rawMaxActiveSessions);
 
 const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
 
@@ -99,12 +102,28 @@ export function getLiveSessionForUser(userId) {
   return null;
 }
 
-export function getUserProfile(userId) {
+export async function getUserProfile(userId) {
   const liveSession = getLiveSessionForUser(userId);
-  const preferredGuild = liveSession ? client.guilds.cache.get(liveSession.guildId) : null;
-  const guild = preferredGuild?.members.cache.has(userId)
-    ? preferredGuild
-    : client.guilds.cache.find((g) => g.members.cache.has(userId));
+
+  let guild = null;
+  if (liveSession) {
+    const liveGuild = client.guilds.cache.get(liveSession.guildId);
+    if (liveGuild) {
+      await ensureMembersFetched(liveGuild);
+      if (liveGuild.members.cache.has(userId)) guild = liveGuild;
+    }
+  }
+
+  if (!guild) {
+    for (const candidate of client.guilds.cache.values()) {
+      await ensureMembersFetched(candidate);
+      if (candidate.members.cache.has(userId)) {
+        guild = candidate;
+        break;
+      }
+    }
+  }
+
   const member = guild?.members.cache.get(userId);
   if (!member) return null;
   return {
@@ -238,6 +257,7 @@ async function handleCaptionsStart(interaction) {
   // checks above before this one claims the slot.
   createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener: null });
 
+  let connection;
   try {
     await interaction.reply(
       `Joining **${channel.name}**`,
@@ -245,7 +265,7 @@ async function handleCaptionsStart(interaction) {
 
     await ensureMembersFetched(channel.guild);
 
-    const connection = joinVoiceChannel({
+    connection = joinVoiceChannel({
       channelId: channel.id,
       guildId,
       adapterCreator: channel.guild.voiceAdapterCreator,
@@ -288,6 +308,7 @@ async function handleCaptionsStart(interaction) {
       broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: false });
     });
   } catch (err) {
+    connection?.destroy();
     endSession(guildId);
     throw err;
   }
