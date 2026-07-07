@@ -66,7 +66,7 @@ export function createAuthGate({ verifyToken, getLiveSession, getRosterSnapshot,
 }
 
 export function createMeHandler({ verifyToken, getProfile }) {
-  return function handleMe(req, res) {
+  return async function handleMe(req, res) {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
     const userId = token ? verifyToken(token) : null;
@@ -75,7 +75,7 @@ export function createMeHandler({ verifyToken, getProfile }) {
       res.end(JSON.stringify({ error: 'unauthorized' }));
       return;
     }
-    const profile = getProfile(userId);
+    const profile = await getProfile(userId);
     if (!profile) {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'not found' }));
