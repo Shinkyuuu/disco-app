@@ -33,16 +33,8 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
         </div>
       </div>
       <div className="settings-scroll">
-        <h3 className="settings-heading">Connection</h3>
+        <h3 className="settings-heading">General</h3>
         <section className="settings-section">
-          <label className="settings-field">
-            Server address
-            <input
-              value={settings.serverAddress}
-              onChange={(e) => onSettingsChange({ serverAddress: e.target.value }, false)}
-              onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
-            />
-          </label>
           <label className="settings-field">
             Avatar mode
             <select value={settings.avatarMode} onChange={(e) => onSettingsChange({ avatarMode: e.target.value }, true)}>
@@ -55,6 +47,18 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
         <YourProfileSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
         <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
         <FriendOverridesSection friends={otherFriends} onChange={reload} />
+
+        <h3 className="settings-heading">Developer</h3>
+        <section className="settings-section">
+          <label className="settings-field">
+            Server address
+            <input
+              value={settings.serverAddress}
+              onChange={(e) => onSettingsChange({ serverAddress: e.target.value }, false)}
+              onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
+            />
+          </label>
+        </section>
       </div>
     </div>
   );
