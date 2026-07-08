@@ -309,10 +309,27 @@ select {
   align-items: stretch;
 }
 
-.launcher-title {
-  margin: 0 0 24px;
+.launcher-welcome {
+  position: relative;
+  z-index: 1;
+  margin: 32px 0 24px;
   font-size: 28px;
   font-weight: 700;
+  text-align: center;
+}
+
+/* margin-top: auto claims the aurora-stage flex column's remaining free
+   space, pinning this to the bottom without overlapping .launcher-content -
+   position: absolute here would let the container grow underneath it. */
+.launcher-version {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  margin: auto 0 10px;
+  font-size: 12px;
+  opacity: 0.5;
+  text-align: center;
+  pointer-events: none;
 }
 
 .launcher-content button {
