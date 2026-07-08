@@ -18,6 +18,12 @@ Product priorities, in order:
 3. **Intuitive UX** - obvious speaker attribution, smooth caption updates,
    readable overlay.
 
+## Client App Version
+
+`client/package.json`'s `"version"` field drives the version number shown in
+the launcher window's footer (via Electron's `app.getVersion()`). Bump it
+whenever you make a release-worthy change to the client.
+
 ## 1. Think Before Coding
 
 **Don't assume. Don't hide confusion. Surface tradeoffs.**

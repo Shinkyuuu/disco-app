@@ -306,6 +306,7 @@ function registerIpcHandlers() {
     chatOpacity: store.get('chatOpacity'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
+    appVersion: app.getVersion(),
   }));
 
   ipcMain.handle('set-settings', (_event, partial) => {
@@ -417,8 +418,10 @@ function rendererUrl(view) {
 
 function createLauncherWindow() {
   launcherWindow = new BrowserWindow({
-    width: 440,
-    height: 560,
+    width: 650,
+    height: 700,
+    minWidth: 440,
+    minHeight: 560,
     frame: false, // no OS title/menu bar - the renderer draws its own header + menu
     icon: ICON_PATH,
     webPreferences: {

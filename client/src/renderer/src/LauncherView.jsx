@@ -141,6 +141,7 @@ export default function LauncherView() {
         <div className="aurora-backdrop">
           <Aurora colorStops={AURORA_COLOR_STOPS} speed={0.4} />
         </div>
+        {page !== 'settings' && settings.hasSessionToken && <h1 className="launcher-welcome">✧ Welcome back! ✧</h1>}
         {page === 'settings' ? (
           <SettingsView
             settings={settings}
@@ -152,7 +153,6 @@ export default function LauncherView() {
           />
         ) : (
           <div className="launcher-content">
-            <h1 className="launcher-title"></h1>
             {loginError && (
               <div role="alert">
                 <p>{loginError}</p>
@@ -201,6 +201,7 @@ export default function LauncherView() {
             )}
           </div>
         )}
+        {page !== 'settings' && <p className="launcher-version">v{settings.appVersion}</p>}
       </div>
     </div>
   );
