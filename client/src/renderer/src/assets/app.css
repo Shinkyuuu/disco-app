@@ -309,6 +309,36 @@ select {
   align-items: stretch;
 }
 
+.launcher-info-box {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: calc(100% - 40px);
+  max-width: 480px;
+  margin: 0 auto 14px;
+  padding: 16px 20px;
+  background: rgba(13, 14, 17, 0.55);
+  border: 1px solid rgb(208, 167, 255);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+}
+
+.launcher-info-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.launcher-info-desc {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
 .launcher-welcome {
   position: relative;
   z-index: 1;

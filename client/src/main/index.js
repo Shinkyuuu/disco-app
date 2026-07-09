@@ -182,12 +182,19 @@ function createChatWindow() {
     // Transparent so the header strip above the chat panel is invisible -
     // speaker avatars render there and appear to float above the window.
     transparent: true,
-    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  // 'screen-saver' is the highest always-on-top level Electron exposes; the
+  // default 'floating' level can still lose the z-order fight against
+  // fullscreen games. Reasserting on blur covers games that re-grab the top
+  // of the z-order themselves when they regain focus after a click on the overlay.
+  chatWindow.setAlwaysOnTop(true, 'screen-saver');
+  chatWindow.on('blur', () => {
+    if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
   });
   chatWindow.on('resized', () => {
     const [w, h] = chatWindow.getSize();
@@ -407,7 +414,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('window-set-always-on-top', (event, value) => {
-    BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value);
+    BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value, 'screen-saver');
   });
 }
 
