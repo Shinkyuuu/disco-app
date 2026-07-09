@@ -17,7 +17,7 @@ body,
 body {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  color: #e4e6ea;
+  color: #ffffff;
   /* Transparent so the chat window's header strip is invisible; opaque views
      (launcher, chat panel) paint their own backgrounds. */
   background: transparent;
@@ -317,14 +317,27 @@ select {
   max-width: 480px;
   margin: 0 auto 14px;
   padding: 16px 20px;
-  background: rgba(13, 14, 17, 0.55);
+  background: #0d0e11;
   border: 1px solid rgb(208, 167, 255);
   border-radius: 14px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
   text-align: left;
+}
+
+.launcher-info-bg-image {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  z-index: -1;
+  pointer-events: none;
+  filter: brightness(0.65);
 }
 
 .launcher-info-title {
@@ -346,6 +359,54 @@ select {
   font-size: 28px;
   font-weight: 700;
   text-align: center;
+}
+
+/* --- updater splash window --- */
+.updater-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #0d0e11;
+  border: 1px solid #6d5efc;
+  -webkit-app-region: drag;
+}
+
+.updater-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  margin-bottom: 2px;
+}
+
+.updater-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.updater-text {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.updater-progress {
+  width: 200px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.updater-progress-fill {
+  height: 100%;
+  background: #6d5efc;
+  border-radius: 2px;
+  transition: width 0.3s ease;
 }
 
 /* margin-top: auto claims the aurora-stage flex column's remaining free
@@ -648,6 +709,24 @@ select {
   gap: 4px;
   font-size: 14px;
   margin-bottom: 8px;
+}
+
+.about-scroll .settings-heading {
+  font-size: 16px;
+}
+
+.about-scroll p,
+.about-scroll li {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.about-scroll ul {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* Your Profile - pinned, accent-bordered */

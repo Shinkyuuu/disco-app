@@ -6,6 +6,7 @@ import ProfileHeader from './ProfileHeader';
 import BorderGlow from './BorderGlow';
 import Aurora from './Aurora';
 import backgroundImage from './assets/background.png';
+import aboutContainerBackground from './assets/about_container_background.png';
 
 const AURORA_COLOR_STOPS = ['#3b82f6', '#7C3AED', '#3b82f6'];
 
@@ -205,8 +206,9 @@ export default function LauncherView() {
               )}
             </div>
             <div className="launcher-info-box">
-              <h3 className="launcher-info-title">How does this work?</h3>
-              <p className="launcher-info-desc">Learn how Disco captions your voice channel.</p>
+              <img className="launcher-info-bg-image" src={aboutContainerBackground} alt="" />
+              <h3 className="launcher-info-title">About the Disco App!</h3>
+              <p className="launcher-info-desc">Learn about Disco and how it works</p>
               <button onClick={() => setPage('about')}>Click me!</button>
             </div>
           </>
