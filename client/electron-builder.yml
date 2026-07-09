@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.codypark.disco
 productName: Disco
 directories:
   buildResources: build
@@ -38,5 +38,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: Shinkyuuu
+  repo: disco-app

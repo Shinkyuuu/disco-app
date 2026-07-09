@@ -1,4 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import pkg from 'electron-updater';
+const { autoUpdater } = pkg;
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
@@ -41,6 +43,7 @@ function chatWindowHeightFor(avatarSize) {
   return (HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small) + CHAT_PANEL_HEIGHT;
 }
 
+let updaterWindow = null;
 let launcherWindow = null;
 let chatWindow = null;
 let pendingAuthToken = null;
@@ -293,9 +296,8 @@ if (!gotLock) {
     reconcileFriendProfiles(store);
     seedDefaultProfileColors(store);
     registerIpcHandlers();
-    createLauncherWindow();
-    if (store.get('sessionToken')) startProfilePolling();
-    if (deferredOpenUrl) handleDeepLink(deferredOpenUrl);
+    createUpdaterWindow();
+    setupAutoUpdater();
   });
 }
 
@@ -416,6 +418,7 @@ function registerIpcHandlers() {
   ipcMain.handle('window-set-always-on-top', (event, value) => {
     BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value, 'screen-saver');
   });
+
 }
 
 function rendererUrl(view) {
@@ -425,11 +428,13 @@ function rendererUrl(view) {
 
 function createLauncherWindow() {
   launcherWindow = new BrowserWindow({
-    width: 650,
-    height: 700,
+    width: 850,
+    height: 900,
     minWidth: 440,
     minHeight: 560,
     frame: false, // no OS title/menu bar - the renderer draws its own header + menu
+    show: false,
+    backgroundColor: '#0d0e11',
     icon: ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -439,6 +444,7 @@ function createLauncherWindow() {
   });
   launcherWindow.loadURL(rendererUrl('launcher'));
   launcherWindow.on('ready-to-show', () => {
+    launcherWindow.show();
     if (pendingAuthToken) {
       launcherWindow.webContents.send('auth-token', pendingAuthToken);
       pendingAuthToken = null;
@@ -459,5 +465,68 @@ function createLauncherWindow() {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
+let updaterOpenedAt = 0;
+const MIN_UPDATER_MS = 1000;
+
+function createUpdaterWindow() {
+  updaterOpenedAt = Date.now();
+  updaterWindow = new BrowserWindow({
+    width: 360,
+    height: 200,
+    resizable: false,
+    frame: false,
+    show: false,
+    backgroundColor: '#0d0e11',
+    icon: ICON_PATH,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  updaterWindow.loadURL(rendererUrl('updater'));
+  updaterWindow.once('ready-to-show', () => updaterWindow?.show());
+  updaterWindow.on('closed', () => {
+    updaterWindow = null;
+  });
+}
+
+function transitionToLauncher() {
+  const elapsed = Date.now() - updaterOpenedAt;
+  const remaining = Math.max(0, MIN_UPDATER_MS - elapsed);
+  setTimeout(() => {
+    createLauncherWindow();
+    if (store.get('sessionToken')) startProfilePolling();
+    if (deferredOpenUrl) handleDeepLink(deferredOpenUrl);
+    updaterWindow?.close();
+  }, remaining);
+}
+
+function setupAutoUpdater() {
+  autoUpdater.on('update-not-available', () => {
+    transitionToLauncher();
+  });
+  autoUpdater.on('update-available', (info) => {
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: info.version, percent: 0 });
+  });
+  autoUpdater.on('download-progress', (progress) => {
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', percent: Math.floor(progress.percent) });
+  });
+  autoUpdater.on('update-downloaded', () => {
+    // Silent install; relaunch after install completes.
+    autoUpdater.quitAndInstall(true, true);
+  });
+  autoUpdater.on('error', () => {
+    transitionToLauncher();
+  });
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(() => transitionToLauncher());
+  } else {
+    // In dev, skip the update check and open the launcher after the minimum delay.
+    setTimeout(transitionToLauncher, MIN_UPDATER_MS);
+  }
+}
 
 export { deliverAuthToken, createLauncherWindow };
