@@ -48,4 +48,5 @@ contextBridge.exposeInMainWorld('api', {
   setAlwaysOnTop: (value) => ipcRenderer.invoke('window-set-always-on-top', value),
   getProfile: () => ipcRenderer.invoke('get-profile'),
   onProfile: subscribe('profile', (callback) => (_e, result) => callback(result)),
+  onUpdaterStatus: subscribe('updater-status', (callback) => (_e, status) => callback(status)),
 });
