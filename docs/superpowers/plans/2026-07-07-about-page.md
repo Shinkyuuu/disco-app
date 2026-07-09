@@ -21,12 +21,12 @@ manual verification.
 
 - Left-aligned content inside the info box (title, description, button).
 - Info box background must be more transparent than `.launcher-content`'s
-  `rgba(13, 14, 17, 0.88)` — spec value: `rgba(13, 14, 17, 0.55)`.
-- About page body is intentionally blank except for the title — no other
+  `rgba(13, 14, 17, 0.88)` - spec value: `rgba(13, 14, 17, 0.55)`.
+- About page body is intentionally blank except for the title - no other
   content in this change.
 - Reuse `SettingsView`'s existing `.settings-view` / `.settings-topbar` /
   `.settings-topbar-inner` / `.settings-back-btn` / `.settings-title` CSS
-  classes for `AboutView` — no new CSS for the page shell.
+  classes for `AboutView` - no new CSS for the page shell.
 - Info box, background image, welcome text, and version footer are all
   visible only when `page === 'main'` (hidden on both `'settings'` and
   `'about'`).
@@ -36,18 +36,20 @@ manual verification.
 ### Task 1: Info box + About page + routing
 
 **Files:**
+
 - Create: `client/src/renderer/src/AboutView.jsx`
 - Modify: `client/src/renderer/src/LauncherView.jsx`
 - Modify: `client/src/renderer/src/assets/app.css`
 
 **Interfaces:**
-- Consumes: none new — uses existing `window.api` surface already imported
+
+- Consumes: none new - uses existing `window.api` surface already imported
   in `LauncherView.jsx` (no new IPC calls).
 - Produces: `AboutView` component with prop `onBack: () => void` (matches
   `SettingsView`'s existing `onBack` prop shape, `client/src/renderer/src/settings/SettingsView.jsx:6`).
 
 This is one task because the info box's button and the About page it
-navigates to are only manually verifiable together — there's no meaningful
+navigates to are only manually verifiable together - there's no meaningful
 intermediate state a reviewer could approve/reject in isolation.
 
 - [ ] **Step 1: Create `AboutView.jsx`**
@@ -122,11 +124,9 @@ import AboutView from './AboutView';
 2. Replace every `page !== 'settings'` conditional with `page === 'main'`
    (three occurrences: the background image at line 140, the welcome text
    at line 144, and the version footer at line 204).
-
 3. Replace the `page === 'settings' ? (...) : (...)` ternary (lines
    145–203) with a 3-way branch, and add the info box right after the
-   closing `</div>` of `.launcher-content` (still inside the `page ===
-   'main'` branch):
+   closing `</div>` of `.launcher-content` (still inside the `page === 'main'` branch):
 
 ```jsx
 {page === 'settings' ? (
@@ -214,16 +214,17 @@ Expected: no errors.
 Run: `cd client && npm run dev`
 
 In the launcher window that opens:
+
 - Confirm the info box appears below the main container and above the
   version footer, left-aligned, with a visibly more transparent background
   than the main container.
-- Click "Click me!" — confirm it navigates to the About page (title
+- Click "Click me!" - confirm it navigates to the About page (title
   "About" visible, `‹ Back` button present, otherwise blank body).
 - Confirm the info box, background image, welcome text, and version footer
   are all hidden while on the About page.
-- Click `‹ Back` — confirm it returns to the main page with the info box,
+- Click `‹ Back` - confirm it returns to the main page with the info box,
   welcome text, background image, and version footer all restored.
-- Click into Settings and back — confirm no regression (Settings still
+- Click into Settings and back - confirm no regression (Settings still
   works, main page still restores correctly).
 
 - [ ] **Step 6: Commit**
