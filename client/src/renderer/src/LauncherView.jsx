@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import TitleBar from './TitleBar';
 import SettingsView from './settings/SettingsView';
+import AboutView from './AboutView';
 import ProfileHeader from './ProfileHeader';
 import BorderGlow from './BorderGlow';
 import Aurora from './Aurora';
@@ -137,11 +138,11 @@ export default function LauncherView() {
     <div className="launcher-root">
       <TitleBar title="Disco" />
       <div className="aurora-stage">
-        {page !== 'settings' && <img className="launcher-bg-image" src={backgroundImage} alt="" />}
+        {page === 'main' && <img className="launcher-bg-image" src={backgroundImage} alt="" />}
         <div className="aurora-backdrop">
           <Aurora colorStops={AURORA_COLOR_STOPS} speed={0.4} />
         </div>
-        {page !== 'settings' && settings.hasSessionToken && <h1 className="launcher-welcome">✧ Welcome back! ✧</h1>}
+        {page === 'main' && settings.hasSessionToken && <h1 className="launcher-welcome">✧ Welcome back! ✧</h1>}
         {page === 'settings' ? (
           <SettingsView
             settings={settings}
@@ -151,57 +152,66 @@ export default function LauncherView() {
               reloadOwnAppearance(settings.loggedInUserId);
             }}
           />
+        ) : page === 'about' ? (
+          <AboutView onBack={() => setPage('main')} />
         ) : (
-          <div className="launcher-content">
-            {loginError && (
-              <div role="alert">
-                <p>{loginError}</p>
-                <button onClick={handleLogin}>Retry</button>
-              </div>
-            )}
-            {settings.hasSessionToken ? (
-              <>
-                <ProfileHeader
-                  profile={profileState.profile}
-                  reachable={profileState.reachable}
-                  avatarMode={settings.avatarMode}
-                  peekProfile={ownAppearance}
-                />
-                <BorderGlow className="start-chat-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
-                  <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
-                    <ChatIcon />
-                    Start Chat Window
-                  </button>
-                </BorderGlow>
-                <div className="launcher-button-row">
+          <>
+            <div className="launcher-content">
+              {loginError && (
+                <div role="alert">
+                  <p>{loginError}</p>
+                  <button onClick={handleLogin}>Retry</button>
+                </div>
+              )}
+              {settings.hasSessionToken ? (
+                <>
+                  <ProfileHeader
+                    profile={profileState.profile}
+                    reachable={profileState.reachable}
+                    avatarMode={settings.avatarMode}
+                    peekProfile={ownAppearance}
+                  />
+                  <BorderGlow className="start-chat-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
+                    <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
+                      <ChatIcon />
+                      Start Chat Window
+                    </button>
+                  </BorderGlow>
+                  <div className="launcher-button-row">
+                    <button onClick={() => setPage('settings')}>
+                      <SettingsIcon />
+                      Settings
+                    </button>
+                    <button
+                      className="launcher-danger-btn"
+                      onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}
+                    >
+                      <LogoutIcon />
+                      Log out
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
                   <button onClick={() => setPage('settings')}>
                     <SettingsIcon />
                     Settings
                   </button>
-                  <button
-                    className="launcher-danger-btn"
-                    onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}
-                  >
-                    <LogoutIcon />
-                    Log out
+                  <button onClick={handleLogin}>
+                    <LoginIcon />
+                    Login to Discord
                   </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <button onClick={() => setPage('settings')}>
-                  <SettingsIcon />
-                  Settings
-                </button>
-                <button onClick={handleLogin}>
-                  <LoginIcon />
-                  Login to Discord
-                </button>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+            <div className="launcher-info-box">
+              <h3 className="launcher-info-title">How does this work?</h3>
+              <p className="launcher-info-desc">Learn how Disco captions your voice channel.</p>
+              <button onClick={() => setPage('about')}>Click me!</button>
+            </div>
+          </>
         )}
-        {page !== 'settings' && <p className="launcher-version">v{settings.appVersion}</p>}
+        {page === 'main' && <p className="launcher-version">v{settings.appVersion}</p>}
       </div>
     </div>
   );
