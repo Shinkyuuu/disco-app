@@ -56,7 +56,6 @@ export default function ChatView() {
   const [roster, setRoster] = useState([]);
   const [speakingIds, setSpeakingIds] = useState(new Set());
   const [entries, setEntries] = useState([]);
-  const [interimBySpeaker, setInterimBySpeaker] = useState({});
   const [settings, setSettings] = useState(null);
   const [connectionState, setConnectionState] = useState({ status: 'connected' });
 
@@ -131,16 +130,7 @@ export default function ChatView() {
         });
       }),
       window.api.onTranscript((event) => {
-        if (event.isFinal) {
-          setEntries((prev) => [...prev, event]);
-          setInterimBySpeaker((prev) => {
-            const next = { ...prev };
-            delete next[event.speakerId];
-            return next;
-          });
-        } else {
-          setInterimBySpeaker((prev) => ({ ...prev, [event.speakerId]: event }));
-        }
+        setEntries((prev) => [...prev, event]);
       }),
     ];
     window.api.getStateSnapshot().then((snapshot) => {
@@ -225,7 +215,7 @@ export default function ChatView() {
         />
       }
     >
-      <MessageLog entries={entries} interimBySpeaker={interimBySpeaker} colorBySpeaker={colorBySpeaker} chatSize={chatSize} />
+      <MessageLog entries={entries} colorBySpeaker={colorBySpeaker} chatSize={chatSize} />
     </ChatFrame>
   );
 }
