@@ -54,7 +54,7 @@ let wsClient = null;
 const PROFILE_POLL_INTERVAL_MS = 5000;
 let profilePollTimer = null;
 let currentRoster = [];
-const messageLog = []; // [{ speakerId, username, avatarURL, text, isFinal }] - finalized entries only, in order, capped at 1000 (see the 'transcript' handler below)
+const messageLog = []; // [{ speakerId, username, avatarURL, text }] - in order, capped at 1000 (see the 'transcript' handler below)
 
 // Named generically, but every channel sent through here (roster/speaking/transcript/
 // ws-connection-state) is only ever consumed by ChatView - LauncherView never subscribes
@@ -95,22 +95,18 @@ function startWsClient() {
   });
   wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
   wsClient.on('transcript', (event) => {
-    if (event.isFinal) {
-      // receivedAt drives the renderer's 5-second disappearing-chat timer -
-      // stamped once here so live push and a later state-snapshot pull agree
-      // on the same value (not a fresh Date.now() each time it's read).
-      const finalized = { ...event, receivedAt: Date.now() };
-      messageLog.push(finalized);
-      // Bound the array a very long session's worth of finalized lines could otherwise grow
-      // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
-      // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
-      // 1000 lines is far more scrollback than this product's use case (a live
-      // conversation, not an archive) ever needs to show on reopen.
-      if (messageLog.length > 1000) messageLog.shift();
-      broadcastToRenderers('transcript', finalized);
-    } else {
-      broadcastToRenderers('transcript', event);
-    }
+    // receivedAt drives the renderer's 5-second disappearing-chat timer -
+    // stamped once here so live push and a later state-snapshot pull agree
+    // on the same value (not a fresh Date.now() each time it's read).
+    const finalized = { ...event, receivedAt: Date.now() };
+    messageLog.push(finalized);
+    // Bound the array a very long session's worth of finalized lines could otherwise grow
+    // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
+    // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
+    // 1000 lines is far more scrollback than this product's use case (a live
+    // conversation, not an archive) ever needs to show on reopen.
+    if (messageLog.length > 1000) messageLog.shift();
+    broadcastToRenderers('transcript', finalized);
   });
   wsClient.on('open', () => {
     consecutiveFailures = 0;

@@ -25,7 +25,7 @@ const MAX_ACTIVE_SESSIONS = rawMaxActiveSessions === undefined || rawMaxActiveSe
   ? 5
   : Number(rawMaxActiveSessions);
 
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3&interim_results=true';
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
 
 const commands = [
   {
@@ -185,7 +185,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     const msg = JSON.parse(data.toString());
     const transcript = msg.channel?.alternatives?.[0]?.transcript;
     if (!transcript) return;
-    console.log(`[${speaker.username}] ${msg.is_final ? 'final' : 'interim'}: ${transcript}`);
+    console.log(`[${speaker.username}] ${transcript}`);
     broadcastToSession(guildId, {
       type: 'transcript',
       channelId,
@@ -193,7 +193,6 @@ async function startTranscribing(guildId, channelId, connection, userId) {
       username: speaker.username,
       avatarURL: speaker.avatarURL,
       text: transcript,
-      isFinal: msg.is_final,
     });
   });
 
