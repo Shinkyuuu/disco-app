@@ -25,7 +25,7 @@ const MAX_ACTIVE_SESSIONS = rawMaxActiveSessions === undefined || rawMaxActiveSe
   ? 5
   : Number(rawMaxActiveSessions);
 
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3&interim_results=true';
 
 const commands = [
   {
