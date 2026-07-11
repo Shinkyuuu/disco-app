@@ -61,6 +61,16 @@ export default function WindowMenu({
   const [openSubmenu, setOpenSubmenu] = useState(null);
   const menuRef = useRef(null);
 
+  // While collapsed, the chat window is locked to a 28px thin bar - the
+  // dropdown needs the same room it gets in expanded mode, so tell the main
+  // process to temporarily grow the window whenever this menu opens/closes
+  // (a no-op when not collapsed, since there's already room). Covers every
+  // path that changes `open` (button click, item selection, click-outside)
+  // from one place instead of duplicating the call at each call site.
+  useEffect(() => {
+    window.api.setChatMenuOpen(open);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e) {
@@ -84,7 +94,7 @@ export default function WindowMenu({
         ⋯
       </button>
       {open && (
-        <div className={`window-menu-dropdown${collapsed ? ' window-menu-dropdown--up' : ''}`}>
+        <div className="window-menu-dropdown">
           {avatarSize && (
             <SizeSubmenu
               label="Avatar size"

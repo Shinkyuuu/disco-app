@@ -37,6 +37,12 @@ const ICON_PATH = path.join(app.getAppPath(), 'resources', 'icon.png');
 // sizes so the message log doesn't shrink - only the window grows upward.
 const CHAT_WINDOW_WIDTH = 480;
 
+// While collapsed, the ⋯ menu's dropdown needs the same room it gets in
+// expanded mode - the window temporarily grows to at least this panel
+// height while the menu is open (see 'set-chat-menu-open' below), even if
+// the user's real saved panel height is smaller.
+const MENU_OPEN_PANEL_HEIGHT_FLOOR = 300;
+
 let updaterWindow = null;
 let launcherWindow = null;
 let chatWindow = null;
@@ -435,6 +441,24 @@ function registerIpcHandlers() {
     BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value, 'screen-saver');
   });
 
+  // While collapsed, the chat window is locked to a 28px thin bar - opening
+  // the ⋯ dropdown there would render outside the window's bounds and get
+  // clipped (Electron clips all content to the window's rect). Temporarily
+  // grow to (at least) a normal expanded size while the menu is open, then
+  // shrink back to the locked thin-bar size when it closes. No-op outside
+  // collapsed mode, where the dropdown already has room.
+  ipcMain.handle('set-chat-menu-open', (_event, isOpen) => {
+    if (!chatWindow || !store.get('chatCollapsed')) return;
+    if (isOpen) {
+      const avatarSize = store.get('avatarSize');
+      const panelHeight = Math.max(store.get('chatWindowPanelHeight'), MENU_OPEN_PANEL_HEIGHT_FLOOR);
+      const height = chatWindowHeightFor(avatarSize, { collapsed: false, panelHeight });
+      chatWindow.setMaximumSize(0, 0);
+      chatWindow.setSize(store.get('chatWindowWidth'), height);
+    } else {
+      applyChatWindowSize(chatWindow);
+    }
+  });
 }
 
 function rendererUrl(view) {

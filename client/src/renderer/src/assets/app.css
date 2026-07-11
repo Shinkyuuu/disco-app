@@ -114,23 +114,6 @@ select {
   min-width: 120px;
 }
 
-/* While collapsed, the chat panel is only 28px tall and the OS window is
-   locked to that height - a dropdown opening downward from here would
-   render entirely outside the window's bounds and get clipped (Electron
-   clips all content to the window's rect, regardless of CSS overflow).
-   Opening upward into the transparent avatar-header area keeps it within
-   the window and visible. Capped height + scroll because the full menu
-   (150px+) can still exceed the smallest header (avatarSize "small" is
-   158px, the default) - overflow-x stays visible so the avatar/chat-size
-   submenus can still spill out to the left. */
-.window-menu-dropdown--up {
-  top: auto;
-  bottom: 26px;
-  max-height: 140px;
-  overflow-y: auto;
-  overflow-x: visible;
-}
-
 .window-menu-item {
   display: flex;
   align-items: center;
