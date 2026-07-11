@@ -611,10 +611,6 @@ select {
   font-size: 21px;
 }
 
-.message-line--interim {
-  opacity: 0.6;
-}
-
 /* --- settings page (launcher) --- */
 .settings-view {
   position: relative;

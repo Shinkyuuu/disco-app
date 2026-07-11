@@ -60,10 +60,6 @@ const client = new Client({
   ],
 });
 
-client.once(Events.ClientReady, (readyClient) => {
-  console.log(`Logged in as ${readyClient.user.tag}`);
-});
-
 // member.presence is only populated for cached members once GuildPresences is granted,
 // and a one-off REST guild.members.fetch(userId) lookup does not include presence data -
 // so each guild's full member list is fetched once, the first time it's actually needed,
@@ -185,7 +181,6 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     const msg = JSON.parse(data.toString());
     const transcript = msg.channel?.alternatives?.[0]?.transcript;
     if (!transcript) return;
-    console.log(`[${speaker.username}] ${msg.is_final ? 'final' : 'interim'}: ${transcript}`);
     broadcastToSession(guildId, {
       type: 'transcript',
       channelId,
@@ -193,7 +188,6 @@ async function startTranscribing(guildId, channelId, connection, userId) {
       username: speaker.username,
       avatarURL: speaker.avatarURL,
       text: transcript,
-      isFinal: msg.is_final,
     });
   });
 

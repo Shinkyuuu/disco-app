@@ -7,13 +7,12 @@ import { useEffect, useRef } from 'react';
 export const MESSAGE_VISIBLE_MS = 10000;
 export const MESSAGE_FADE_MS = 500;
 
-function MessageLine({ entry, interim = false, colors = {}, chatSize = 'medium' }) {
-  const isFading = !interim && Date.now() - entry.receivedAt >= MESSAGE_VISIBLE_MS;
+function MessageLine({ entry, colors = {}, chatSize = 'medium' }) {
+  const isFading = Date.now() - entry.receivedAt >= MESSAGE_VISIBLE_MS;
   return (
     <div
       className={[
         'message-line',
-        interim ? 'message-line--interim' : '',
         isFading ? 'message-line--fading' : '',
       ].filter(Boolean).join(' ')}
     >
@@ -36,13 +35,12 @@ function MessageLine({ entry, interim = false, colors = {}, chatSize = 'medium' 
   );
 }
 
-export default function MessageLog({ entries, interimBySpeaker, colorBySpeaker = {}, chatSize = 'medium' }) {
-  const interimEntries = Object.values(interimBySpeaker);
+export default function MessageLog({ entries, colorBySpeaker = {}, chatSize = 'medium' }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [entries, interimBySpeaker]);
+  }, [entries]);
 
   return (
     <div className="message-log">
@@ -53,9 +51,6 @@ export default function MessageLog({ entries, interimBySpeaker, colorBySpeaker =
           colors={colorBySpeaker[entry.speakerId]}
           chatSize={chatSize}
         />
-      ))}
-      {interimEntries.map((entry) => (
-        <MessageLine key={entry.speakerId} entry={entry} interim colors={colorBySpeaker[entry.speakerId]} chatSize={chatSize} />
       ))}
       <div ref={bottomRef} />
     </div>

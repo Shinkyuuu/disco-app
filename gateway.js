@@ -116,7 +116,5 @@ export const broadcastToSession = createBroadcaster({
 });
 
 export function startGateway() {
-  httpServer.listen(PORT_NUMBER, () => {
-    console.log(`Caption overlay available at http://localhost:${PORT_NUMBER}`);
-  });
+  httpServer.listen(PORT_NUMBER);
 }
