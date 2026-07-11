@@ -60,6 +60,12 @@ const client = new Client({
   ],
 });
 
+// discord.js emits 'error' on shard/gateway failures; Node throws on an unhandled
+// 'error' event and kills the whole process, so this must always have a listener.
+client.on(Events.Error, (err) => {
+  console.error('Discord client error:', err);
+});
+
 // member.presence is only populated for cached members once GuildPresences is granted,
 // and a one-off REST guild.members.fetch(userId) lookup does not include presence data -
 // so each guild's full member list is fetched once, the first time it's actually needed,
@@ -148,7 +154,15 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   if (activeStreams.has(key)) return;
   activeStreams.set(key, null);
 
-  const speaker = await resolveSpeaker(guildId, userId);
+  let speaker;
+  try {
+    speaker = await resolveSpeaker(guildId, userId);
+  } catch (err) {
+    // Release the reservation on failure (e.g. the user left the guild before this
+    // resolved) so a later speaking event for this user isn't silently no-op'd forever.
+    activeStreams.delete(key);
+    throw err;
+  }
 
   // /disco leave may have run while the attribution lookup above was in flight.
   if (!activeStreams.has(key)) return;
@@ -178,7 +192,13 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   });
 
   dgSocket.on('message', (data) => {
-    const msg = JSON.parse(data.toString());
+    let msg;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch (err) {
+      console.error(`[${userId}] Failed to parse Deepgram message:`, err);
+      return;
+    }
     const transcript = msg.channel?.alternatives?.[0]?.transcript;
     if (!transcript) return;
     broadcastToSession(guildId, {
@@ -204,15 +224,21 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   // unhandled stream error. A single malformed packet from Discord (network
   // jitter/loss) is enough to trigger this, so just end this one user's
   // pipeline instead of crashing the bot for everyone.
+  // Destroying both ends (not just the one that errored) on either error keeps
+  // opusStream from being handed back by receiver.subscribe() to a later speaking
+  // event for this same user while orphaned - which would otherwise pile up repeat
+  // 'error' listeners on the same long-lived stream instance.
   opusStream.on('error', (err) => {
     console.error(`[${userId}] Opus receive error:`, err);
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
     dgSocket.close();
+    decoder.destroy();
   });
   decoder.on('error', (err) => {
     console.error(`[${userId}] Opus decode error:`, err);
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
     dgSocket.close();
+    opusStream.destroy();
   });
 
   activeStreams.set(key, entry);
@@ -311,7 +337,11 @@ async function handleCaptionsStart(interaction) {
 
     connection.receiver.speaking.on('start', (userId) => {
       broadcastToSession(guildId, { type: 'speaking', channelId: channel.id, speakerId: userId, isSpeaking: true });
-      startTranscribing(guildId, channel.id, connection, userId);
+      // An unhandled rejection here (e.g. the member-fetch in resolveSpeaker failing)
+      // would otherwise crash the whole process on Node's default unhandledRejection behavior.
+      startTranscribing(guildId, channel.id, connection, userId).catch((err) => {
+        console.error(`[${userId}] Failed to start transcribing:`, err);
+      });
     });
     // SpeakingMap emits 'end' (not 'stop') ~100ms after a user's last audio packet.
     connection.receiver.speaking.on('end', (userId) => {
