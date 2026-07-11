@@ -7,7 +7,7 @@ export const CHAT_WINDOW_WIDTH = 480;
 export const CHAT_PANEL_HEIGHT = 324;
 export const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 158, medium: 221, large: 281 };
 export const MIN_CHAT_PANEL_HEIGHT = 100;
-export const THIN_BAR_HEIGHT = 28;
+export const THIN_BAR_HEIGHT = 18;
 
 // Total chat window height: the avatar header (grows with avatar size) plus
 // either the full message panel or, when collapsed, a fixed-height thin bar.

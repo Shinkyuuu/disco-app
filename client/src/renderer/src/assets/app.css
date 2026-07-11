@@ -83,11 +83,16 @@ select {
   padding: 4px 8px;
 }
 
-/* --- window menu (top-right ⋯ with Exit dropdown) --- */
+/* --- window menu (⋯ with Exit dropdown) --- */
+/* Anchored to the panel's top edge via bottom/margin-bottom (not a fixed
+   negative top) so it floats the same distance above the panel regardless
+   of the panel's own height - identical position whether expanded or
+   collapsed, since it never depends on .chat-panel--collapsed at all. */
 .window-menu {
   position: absolute;
-  top: 6px;
+  bottom: 100%;
   right: 6px;
+  margin-bottom: 6px;
   -webkit-app-region: no-drag;
   z-index: 10;
 }
@@ -513,32 +518,6 @@ select {
   position: relative;
 }
 
-/* .chat-header and .chat-panel--collapsed are both full-width drag regions
-   (for moving the frameless window), which swallows the left/right edges
-   the OS needs to grab for width resize - most noticeable while collapsed,
-   where the panel is too short to offer much non-drag edge on its own.
-   These punch a no-drag hole at each edge spanning the full window height,
-   so resize still works. pointer-events: none so they don't intercept
-   clicks meant for real content (the ⋯ button sits within the right one). */
-.chat-root::before,
-.chat-root::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 8px;
-  -webkit-app-region: no-drag;
-  pointer-events: none;
-}
-
-.chat-root::before {
-  left: 0;
-}
-
-.chat-root::after {
-  right: 0;
-}
-
 /* Invisible strip above the panel: avatars render here so they appear to
    float above the window. Also the drag handle for the frameless window.
    Height must match main/index.js's HEADER_HEIGHT_BY_AVATAR_SIZE - the
@@ -577,19 +556,26 @@ select {
   flex-direction: column;
 }
 
+/* Fixed height (not flex: 1) so the panel stays visually thin even while
+   the window is temporarily grown for the ⋯ dropdown (see
+   'set-chat-menu-open' in main/index.js) - otherwise this panel's flex: 1
+   would stretch its dark background/border to fill the grown window,
+   making the collapsed box look like it un-collapsed while the menu is
+   open. The dropdown itself still gets its room: it's an absolutely
+   positioned child of .window-menu (which floats above this panel), so it
+   renders into the window's extra height independently of this panel's own
+   size. Height must match main/chatWindowSize.js's THIN_BAR_HEIGHT. */
+.chat-panel--collapsed {
+  flex: none;
+  height: 18px;
+}
+
 .chat-panel--message {
   justify-content: center;
   align-items: center;
   gap: 10px;
   padding: 16px;
   text-align: center;
-}
-
-.chat-panel--collapsed {
-  flex: none;
-  height: 28px;
-  padding: 0;
-  -webkit-app-region: drag; /* draggable strip, like .chat-header */
 }
 
 .message-log {

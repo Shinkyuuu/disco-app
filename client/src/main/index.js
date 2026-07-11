@@ -43,6 +43,17 @@ const CHAT_WINDOW_WIDTH = 480;
 // the user's real saved panel height is smaller.
 const MENU_OPEN_PANEL_HEIGHT_FLOOR = 300;
 
+// Chromium's setMaximumSize(0, 0) means "no maximum" - but that sentinel
+// only applies when BOTH dimensions are 0 (extensions::SizeConstraints::
+// HasMaximumSize() is `width != 0 || height != 0`). Locking max height while
+// collapsed (a real, deliberate constraint) made width's "0 = unbounded"
+// stop applying, leaving a real maxWidth of 0 that conflicted with
+// minWidth: 300 and silently blocked interactive width resize entirely.
+// Using an explicit large value instead of 0 sidesteps the sentinel and its
+// both-or-neither behavior - same value Electron's own constructor-option
+// path (native_window.cc InitFromOptions) substitutes for an unset max.
+const NO_MAX_WIDTH = 2147483647;
+
 let updaterWindow = null;
 let launcherWindow = null;
 let chatWindow = null;
@@ -180,7 +191,7 @@ function applyChatWindowSize(win) {
   const [currentWidth] = win.getSize();
   if (collapsed) {
     win.setMinimumSize(300, height);
-    win.setMaximumSize(0, height);
+    win.setMaximumSize(NO_MAX_WIDTH, height);
   } else {
     win.setMinimumSize(300, HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT);
     win.setMaximumSize(0, 0);
@@ -446,8 +457,8 @@ function registerIpcHandlers() {
     BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value, 'screen-saver');
   });
 
-  // While collapsed, the chat window is locked to a 28px thin bar - opening
-  // the ⋯ dropdown there would render outside the window's bounds and get
+  // While collapsed, the chat window is locked to the thin bar - opening the
+  // ⋯ dropdown there would render outside the window's bounds and get
   // clipped (Electron clips all content to the window's rect). Temporarily
   // grow to (at least) a normal expanded size while the menu is open, then
   // shrink back to the locked thin-bar size when it closes. No-op outside
