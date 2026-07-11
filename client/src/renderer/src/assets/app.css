@@ -97,8 +97,11 @@ select {
   z-index: 10;
 }
 
+/* Opaque (not transparent) background - this button now floats directly
+   over the header's avatar strip (see .window-menu above) with nothing
+   behind it, so it needs its own solid backing to stay legible. */
 .window-menu > button {
-  background: transparent;
+  background: #26272d;
   padding: 2px 8px;
   font-size: 16px;
   line-height: 1;
@@ -556,18 +559,20 @@ select {
   flex-direction: column;
 }
 
-/* Fixed height (not flex: 1) so the panel stays visually thin even while
-   the window is temporarily grown for the ⋯ dropdown (see
-   'set-chat-menu-open' in main/index.js) - otherwise this panel's flex: 1
-   would stretch its dark background/border to fill the grown window,
-   making the collapsed box look like it un-collapsed while the menu is
-   open. The dropdown itself still gets its room: it's an absolutely
-   positioned child of .window-menu (which floats above this panel), so it
-   renders into the window's extra height independently of this panel's own
-   size. Height must match main/chatWindowSize.js's THIN_BAR_HEIGHT. */
+/* Zero height and no visible box (not flex: 1, no background/border) - while
+   collapsed there's no chat bar at all, just the header's avatars and the
+   floating ⋯ button (see .window-menu above, which anchors to this panel's
+   top edge regardless of its height). Still present in the DOM rather than
+   unmounted so .window-menu has a positioned ancestor to float above, and
+   so it stays visually empty even while the window is temporarily grown for
+   the ⋯ dropdown (see 'set-chat-menu-open' in main/index.js) - otherwise
+   flex: 1 would stretch this box to fill the grown window, making the
+   collapsed state look like it un-collapsed while the menu is open. */
 .chat-panel--collapsed {
   flex: none;
-  height: 18px;
+  height: 0;
+  background: transparent;
+  border: none;
 }
 
 .chat-panel--message {
