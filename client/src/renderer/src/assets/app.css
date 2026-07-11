@@ -510,6 +510,33 @@ select {
   display: flex;
   flex-direction: column;
   background: transparent;
+  position: relative;
+}
+
+/* .chat-header and .chat-panel--collapsed are both full-width drag regions
+   (for moving the frameless window), which swallows the left/right edges
+   the OS needs to grab for width resize - most noticeable while collapsed,
+   where the panel is too short to offer much non-drag edge on its own.
+   These punch a no-drag hole at each edge spanning the full window height,
+   so resize still works. pointer-events: none so they don't intercept
+   clicks meant for real content (the ⋯ button sits within the right one). */
+.chat-root::before,
+.chat-root::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
+.chat-root::before {
+  left: 0;
+}
+
+.chat-root::after {
+  right: 0;
 }
 
 /* Invisible strip above the panel: avatars render here so they appear to
