@@ -168,11 +168,16 @@ function stopProfilePolling() {
 // chatCollapsed settings. While collapsed, min/max height are both locked to
 // the thin-bar height so the window can't be drag-resized taller than the
 // CSS thin bar; while expanded, the normal min height is restored and the
-// max height is uncapped.
+// max height is uncapped. Width comes from the window's own current size,
+// not the persisted chatWindowWidth - this can run right after the user
+// finishes a drag-resize (e.g. releasing the mouse outside the ⋯ dropdown
+// also closes it), and the 'resized' listener's store write is not
+// guaranteed to have landed yet at that point.
 function applyChatWindowSize(win) {
   const avatarSize = store.get('avatarSize');
   const collapsed = store.get('chatCollapsed');
   const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
+  const [currentWidth] = win.getSize();
   if (collapsed) {
     win.setMinimumSize(300, height);
     win.setMaximumSize(0, height);
@@ -180,7 +185,7 @@ function applyChatWindowSize(win) {
     win.setMinimumSize(300, HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT);
     win.setMaximumSize(0, 0);
   }
-  win.setSize(store.get('chatWindowWidth'), height);
+  win.setSize(currentWidth, height);
 }
 
 function createChatWindow() {
@@ -453,8 +458,9 @@ function registerIpcHandlers() {
       const avatarSize = store.get('avatarSize');
       const panelHeight = Math.max(store.get('chatWindowPanelHeight'), MENU_OPEN_PANEL_HEIGHT_FLOOR);
       const height = chatWindowHeightFor(avatarSize, { collapsed: false, panelHeight });
+      const [currentWidth] = chatWindow.getSize();
       chatWindow.setMaximumSize(0, 0);
-      chatWindow.setSize(store.get('chatWindowWidth'), height);
+      chatWindow.setSize(currentWidth, height);
     } else {
       applyChatWindowSize(chatWindow);
     }
