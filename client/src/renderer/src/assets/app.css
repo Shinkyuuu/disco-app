@@ -281,23 +281,45 @@ select {
   background: #3a3b42;
 }
 
-.title-bar-button--close {
+.title-bar-button--close:hover {
   background: #e0526a;
   color: #ffffff;
 }
 
-.title-bar-button--close:hover {
-  background: #c93f57;
+/* Wraps .launcher-content so the custom-avatar companion (see
+   .profile-companion below) can be absolutely positioned to peek above and
+   behind the card, rather than inside it. Sized/centered identically to how
+   .launcher-content used to size/center itself, so the wrap's box exactly
+   matches the card's footprint. */
+.launcher-card-wrap {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  width: calc(100% - 40px);
+  max-width: 480px;
+  margin: 20px auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Reserves room above the card for the peeking avatar - just its bottom
+   sliver overlaps down into the card below, which paints over it
+   (.launcher-content's z-index: 1 vs. .profile-companion's z-index: 0). */
+.launcher-card-wrap--peeking {
+  padding-top: 100px;
+}
+
+/* Custom avatar mode but no avatar image set yet - reserve room for just
+   the speech bubble. */
+.launcher-card-wrap--bubble-only {
+  padding-top: 40px;
 }
 
 .launcher-content {
   position: relative;
   z-index: 1;
   flex: 0 1 auto;
-  width: calc(100% - 40px);
-  max-width: 480px;
-  max-height: calc(100% - 40px);
-  margin: 20px auto;
+  min-height: 0;
   padding: 32px 20px 20px;
   background: rgba(13, 14, 17, 0.88);
   border: 1px solid rgb(208, 167, 255);
@@ -350,15 +372,6 @@ select {
   margin: 0;
   font-size: 12px;
   opacity: 0.6;
-}
-
-.launcher-welcome {
-  position: relative;
-  z-index: 1;
-  margin: 32px 0 24px;
-  font-size: 28px;
-  font-weight: 700;
-  text-align: center;
 }
 
 /* --- updater splash window --- */
@@ -436,17 +449,31 @@ select {
   font-weight: 600;
 }
 
-.start-chat-glow {
+.launcher-kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.launcher-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.launcher-cta-glow {
   margin-bottom: 20px;
 }
 
-.start-chat-glow .launcher-primary-btn {
+.launcher-cta-glow .launcher-primary-btn {
   width: 100%;
   background: transparent;
   border: none;
 }
 
-.start-chat-glow .launcher-primary-btn:hover {
+.launcher-cta-glow .launcher-primary-btn:hover {
   background: transparent;
 }
 
@@ -872,44 +899,59 @@ select {
 }
 
 /* --- profile header (launcher, logged in) --- */
-.profile-header-block {
+.profile-header {
   position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.profile-header-block--custom {
-  padding-top: 58px; /* reserves room above the box for .profile-speech-bubble */
+.profile-header-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid transparent;
+  flex: none;
 }
 
-/* Reserves room above the box for the peeking avatar (custom-avatar mode
-   only) - just its bottom sliver overlaps down into the box below, which
-   paints over it (z-index: 1), matching the chat window's "medium" custom
-   avatar size/overlap ratio (speaker-icon--custom.speaker-icon--medium). */
-.profile-header-block--peeking {
-  padding-top: 152px;
-}
-
-.profile-peek-avatar {
+/* Avatar/speech-bubble companion (custom avatar mode only) - peeks above
+   and behind .launcher-content. Positioned within .launcher-card-wrap,
+   which reserves the room above the card via its --peeking/--bubble-only
+   modifier. Clipped to that same reserved height so the avatar is cut off
+   cleanly where the card begins (rather than bleeding through the card's
+   translucent background) - it reads as popping out from behind the card. */
+.profile-companion {
   position: absolute;
   top: 0;
   left: 16px;
-  max-height: 183px;
-  max-width: 146px;
-  border-radius: 0; /* character art, not a round avatar - don't clip it */
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  z-index: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   pointer-events: none;
 }
 
-/* Speech bubble floating above the profile box, right of the avatar
-   (avatar is 64px wide, starting at the box's 16px padding, so its right
-   edge sits at 80px - this bubble starts 50px past that). No separate tail
-   element - the bottom-left corner is left square (pointing down toward the
-   avatar) while the other three corners are rounded more, reading as a
-   speech-bubble shape without a triangle that has to seam perfectly. */
+.launcher-card-wrap--peeking .profile-companion {
+  height: 100px;
+}
+
+.launcher-card-wrap--bubble-only .profile-companion {
+  height: 40px;
+}
+
+.profile-companion-avatar {
+  max-height: 120px;
+  max-width: 96px;
+  border-radius: 0; /* character art, not a round avatar - don't clip it */
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5));
+  flex: none;
+}
+
 .profile-speech-bubble {
-  position: absolute;
-  top: 0;
-  left: 150px;
-  max-width: 170px;
+  max-width: 190px;
   padding: 8px 10px;
   background: #ffffff;
   color: #1a1b1f;
@@ -917,7 +959,6 @@ select {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
-  pointer-events: none;
 }
 
 .speech-bubble-caret {
@@ -932,27 +973,6 @@ select {
   50% {
     opacity: 0;
   }
-}
-
-.profile-header {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: #26272d;
-  border-radius: 8px;
-  margin-bottom: 14px;
-}
-
-.profile-header-avatar {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid transparent;
-  flex: none;
 }
 
 .profile-header-info {
