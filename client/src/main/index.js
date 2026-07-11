@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
 import { store } from './store.js';
+import { chatWindowHeightFor, HEADER_HEIGHT_BY_AVATAR_SIZE, MIN_CHAT_PANEL_HEIGHT } from './chatWindowSize.js';
 import { createWsClient } from './wsClient.js';
 import { schemeFor } from './serverScheme.js';
 import { fetchProfile, AuthError } from './profileClient.js';
@@ -35,13 +36,6 @@ const ICON_PATH = path.join(app.getAppPath(), 'resources', 'icon.png');
 // their rect, regardless of CSS overflow). Panel height stays constant across
 // sizes so the message log doesn't shrink - only the window grows upward.
 const CHAT_WINDOW_WIDTH = 480;
-const CHAT_PANEL_HEIGHT = 324;
-const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 158, medium: 221, large: 281 };
-const MIN_CHAT_PANEL_HEIGHT = 100;
-
-function chatWindowHeightFor(avatarSize) {
-  return (HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small) + CHAT_PANEL_HEIGHT;
-}
 
 let updaterWindow = null;
 let launcherWindow = null;
@@ -164,18 +158,40 @@ function stopProfilePolling() {
   }
 }
 
+// Resizes an already-open chat window to match the current avatarSize/
+// chatCollapsed settings. While collapsed, min/max height are both locked to
+// the thin-bar height so the window can't be drag-resized taller than the
+// CSS thin bar; while expanded, the normal min height is restored and the
+// max height is uncapped.
+function applyChatWindowSize(win) {
+  const avatarSize = store.get('avatarSize');
+  const collapsed = store.get('chatCollapsed');
+  const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
+  if (collapsed) {
+    win.setMinimumSize(300, height);
+    win.setMaximumSize(0, height);
+  } else {
+    win.setMinimumSize(300, HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT);
+    win.setMaximumSize(0, 0);
+  }
+  win.setSize(store.get('chatWindowWidth'), height);
+}
+
 function createChatWindow() {
   if (chatWindow) {
     chatWindow.focus();
     return;
   }
   const avatarSize = store.get('avatarSize');
-  const headerH = HEADER_HEIGHT_BY_AVATAR_SIZE[avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
+  const collapsed = store.get('chatCollapsed');
+  const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
   chatWindow = new BrowserWindow({
     width: store.get('chatWindowWidth'),
-    height: store.get('chatWindowPanelHeight') + headerH,
+    height,
     minWidth: 300,
-    minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT,
+    ...(collapsed
+      ? { minHeight: height, maxHeight: height }
+      : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
     frame: false,
     icon: ICON_PATH,
     // Transparent so the header strip above the chat panel is invisible -
@@ -197,9 +213,13 @@ function createChatWindow() {
   });
   chatWindow.on('resized', () => {
     const [w, h] = chatWindow.getSize();
+    store.set('chatWindowWidth', w);
+    // While collapsed the window is locked to the thin-bar height, which
+    // isn't a real panel-height preference - skip persisting it so the
+    // user's actual panel height survives a collapse/expand round trip.
+    if (store.get('chatCollapsed')) return;
     const currentAvatarSize = store.get('avatarSize');
     const currentHeaderH = HEADER_HEIGHT_BY_AVATAR_SIZE[currentAvatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
-    store.set('chatWindowWidth', w);
     store.set('chatWindowPanelHeight', Math.max(h - currentHeaderH, MIN_CHAT_PANEL_HEIGHT));
   });
   chatWindow.loadURL(rendererUrl('chat'));
@@ -309,6 +329,7 @@ function registerIpcHandlers() {
     avatarSize: store.get('avatarSize'),
     chatSize: store.get('chatSize'),
     chatOpacity: store.get('chatOpacity'),
+    chatCollapsed: store.get('chatCollapsed'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
     appVersion: app.getVersion(),
@@ -319,11 +340,10 @@ function registerIpcHandlers() {
       store.set(key, value);
     }
     // Resize the already-open chat window immediately - otherwise a larger
-    // avatar size wouldn't take visual effect (or would clip) until the next
-    // time the window happens to be recreated.
-    if ('avatarSize' in partial && chatWindow) {
-      const newHeaderH = HEADER_HEIGHT_BY_AVATAR_SIZE[partial.avatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
-      chatWindow.setSize(store.get('chatWindowWidth'), store.get('chatWindowPanelHeight') + newHeaderH);
+    // avatar size, or a collapse/expand toggle, wouldn't take visual effect
+    // (or would clip) until the next time the window happens to be recreated.
+    if (('avatarSize' in partial || 'chatCollapsed' in partial) && chatWindow) {
+      applyChatWindowSize(chatWindow);
     }
   });
 
