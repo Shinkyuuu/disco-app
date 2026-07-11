@@ -3,6 +3,7 @@ import TitleBar from './TitleBar';
 import SettingsView from './settings/SettingsView';
 import AboutView from './AboutView';
 import ProfileHeader from './ProfileHeader';
+import ProfileCompanion from './ProfileCompanion';
 import BorderGlow from './BorderGlow';
 import Aurora from './Aurora';
 import backgroundImage from './assets/background.png';
@@ -122,6 +123,16 @@ export default function LauncherView() {
 
   if (!settings) return null;
 
+  // Governs the peeking-avatar/speech-bubble companion: only shown for a
+  // reachable, found, custom-avatar-mode profile, and only "peeking" (vs.
+  // bubble-only) once the user has actually set a custom avatar image.
+  const companionMode =
+    settings.hasSessionToken && profileState.reachable && profileState.profile && settings.avatarMode === 'custom'
+      ? ownAppearance?.avatarSilent
+        ? 'peeking'
+        : 'bubble-only'
+      : null;
+
   function handleLogin() {
     setLoginError(null);
     window.api.openLogin(settings.serverAddress).catch(() =>
@@ -143,7 +154,6 @@ export default function LauncherView() {
         <div className="aurora-backdrop">
           <Aurora colorStops={AURORA_COLOR_STOPS} speed={0.4} />
         </div>
-        {page === 'main' && settings.hasSessionToken && <h1 className="launcher-welcome">✧ Welcome back! ✧</h1>}
         {page === 'settings' ? (
           <SettingsView
             settings={settings}
@@ -157,53 +167,70 @@ export default function LauncherView() {
           <AboutView onBack={() => setPage('main')} />
         ) : (
           <>
-            <div className="launcher-content">
-              {loginError && (
-                <div role="alert">
-                  <p>{loginError}</p>
-                  <button onClick={handleLogin}>Retry</button>
-                </div>
+            <div
+              className={`launcher-card-wrap${
+                companionMode === 'peeking'
+                  ? ' launcher-card-wrap--peeking'
+                  : companionMode === 'bubble-only'
+                    ? ' launcher-card-wrap--bubble-only'
+                    : ''
+              }`}
+            >
+              {companionMode && (
+                <ProfileCompanion
+                  avatarMode={settings.avatarMode}
+                  peekProfile={ownAppearance}
+                  discordAvatarURL={profileState.profile.avatarURL}
+                />
               )}
-              {settings.hasSessionToken ? (
-                <>
-                  <ProfileHeader
-                    profile={profileState.profile}
-                    reachable={profileState.reachable}
-                    avatarMode={settings.avatarMode}
-                    peekProfile={ownAppearance}
-                  />
-                  <BorderGlow className="start-chat-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
-                    <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
-                      <ChatIcon />
-                      Start Chat Window
-                    </button>
-                  </BorderGlow>
-                  <div className="launcher-button-row">
+              <div className="launcher-content">
+                {loginError && (
+                  <div role="alert">
+                    <p>{loginError}</p>
+                    <button onClick={handleLogin}>Retry</button>
+                  </div>
+                )}
+                {settings.hasSessionToken ? (
+                  <>
+                    <p className="launcher-kicker">Welcome back</p>
+                    <ProfileHeader profile={profileState.profile} reachable={profileState.reachable} />
+                    <div className="launcher-divider" />
+                    <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
+                      <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
+                        <ChatIcon />
+                        Start Chat Window
+                      </button>
+                    </BorderGlow>
+                    <div className="launcher-button-row">
+                      <button onClick={() => setPage('settings')}>
+                        <SettingsIcon />
+                        Settings
+                      </button>
+                      <button
+                        className="launcher-danger-btn"
+                        onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}
+                      >
+                        <LogoutIcon />
+                        Log out
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="launcher-kicker">Get started</p>
+                    <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
+                      <button className="launcher-primary-btn" onClick={handleLogin}>
+                        <LoginIcon />
+                        Login to Discord
+                      </button>
+                    </BorderGlow>
                     <button onClick={() => setPage('settings')}>
                       <SettingsIcon />
                       Settings
                     </button>
-                    <button
-                      className="launcher-danger-btn"
-                      onClick={() => window.api.logout().then(() => window.api.getSettings().then(setSettings))}
-                    >
-                      <LogoutIcon />
-                      Log out
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <button onClick={() => setPage('settings')}>
-                    <SettingsIcon />
-                    Settings
-                  </button>
-                  <button onClick={handleLogin}>
-                    <LoginIcon />
-                    Login to Discord
-                  </button>
-                </>
-              )}
+                  </>
+                )}
+              </div>
             </div>
             <div className="launcher-info-box">
               <img className="launcher-info-bg-image" src={aboutContainerBackground} alt="" />
