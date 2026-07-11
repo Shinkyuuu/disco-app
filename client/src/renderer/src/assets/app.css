@@ -558,6 +558,13 @@ select {
   text-align: center;
 }
 
+.chat-panel--collapsed {
+  flex: none;
+  height: 28px;
+  padding: 0;
+  -webkit-app-region: drag; /* draggable strip, like .chat-header */
+}
+
 .message-log {
   flex: 1;
   min-height: 0;
