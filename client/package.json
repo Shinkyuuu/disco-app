@@ -1,6 +1,6 @@
 {
   "name": "disco-client",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "An Electron application with React",
   "main": "./out/main/index.js",
   "author": "Cody Park",
@@ -16,7 +16,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/main/chatWindowSize.test.js src/renderer/src/resolveAppearance.test.js src/renderer/src/typewriter.test.js"
+    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/main/chatWindowSize.test.js src/renderer/src/resolveAppearance.test.js src/renderer/src/typewriter.test.js src/renderer/src/chatAppearanceOptions.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
