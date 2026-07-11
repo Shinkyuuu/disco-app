@@ -84,7 +84,7 @@ export default function WindowMenu({
         ⋯
       </button>
       {open && (
-        <div className="window-menu-dropdown">
+        <div className={`window-menu-dropdown${collapsed ? ' window-menu-dropdown--up' : ''}`}>
           {avatarSize && (
             <SizeSubmenu
               label="Avatar size"
