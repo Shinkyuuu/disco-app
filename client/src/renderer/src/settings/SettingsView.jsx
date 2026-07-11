@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import YourProfileSection from './YourProfileSection';
 import DefaultSlotsSection from './DefaultSlotsSection';
 import FriendOverridesSection from './FriendOverridesSection';
+import ChatAppearanceSection from './ChatAppearanceSection';
 
 export default function SettingsView({ settings, onSettingsChange, onBack }) {
   const [defaultProfiles, setDefaultProfiles] = useState([]);
@@ -43,6 +44,8 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
             </select>
           </label>
         </section>
+
+        <ChatAppearanceSection settings={settings} onSettingsChange={onSettingsChange} />
 
         <YourProfileSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
         <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
