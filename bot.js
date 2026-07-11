@@ -199,6 +199,22 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
   });
 
+  // Opus streams have no 'error' listener by default - Node throws and kills
+  // the whole process (every guild's session, not just this one user) on an
+  // unhandled stream error. A single malformed packet from Discord (network
+  // jitter/loss) is enough to trigger this, so just end this one user's
+  // pipeline instead of crashing the bot for everyone.
+  opusStream.on('error', (err) => {
+    console.error(`[${userId}] Opus receive error:`, err);
+    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    dgSocket.close();
+  });
+  decoder.on('error', (err) => {
+    console.error(`[${userId}] Opus decode error:`, err);
+    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    dgSocket.close();
+  });
+
   activeStreams.set(key, entry);
 
   opusStream.once('end', () => {
