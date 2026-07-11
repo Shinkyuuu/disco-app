@@ -20,10 +20,21 @@ export const httpServer = http.createServer((req, res) => {
 const gatewayClients = new Map(); // ws -> userId
 const wss = new WebSocketServer({ server: httpServer });
 
+// Unhandled 'error' on either of these throws and kills the whole process.
+httpServer.on('error', (err) => console.error('HTTP server error:', err));
+wss.on('error', (err) => console.error('WebSocket server error:', err));
+
 const AUTH_TIMEOUT_MS = 5000;
 
 export function createAuthGate({ verifyToken, getLiveSession, getRosterSnapshot, clients, timeoutMs = AUTH_TIMEOUT_MS }) {
   return function handleConnection(ws) {
+    // A client socket that dies abruptly (network drop, reset) emits 'error', not just
+    // 'close'. Node throws on an unhandled 'error' event and kills the whole process -
+    // every guild's session, not just this one client - so this must always be handled.
+    ws.on('error', (err) => {
+      console.error('Gateway client socket error:', err);
+    });
+
     const timer = setTimeout(() => ws.close(4008, 'auth timeout'), timeoutMs);
     // Without this, a client that opens a socket and disconnects without ever sending
     // anything leaves the timer pending for up to timeoutMs, calling ws.close() on an
