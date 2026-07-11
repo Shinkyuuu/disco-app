@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog, { MESSAGE_VISIBLE_MS, MESSAGE_FADE_MS } from './MessageLog';
 import WindowMenu from './WindowMenu';
+import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
 
 // The one-time state-snapshot pull and the live transcript push are two
 // independent async writers of `entries` with no ordering guarantee between
@@ -141,6 +142,9 @@ export default function ChatView() {
       window.api.onTranscript((event) => {
         setEntries((prev) => [...prev, event]);
       }),
+      window.api.onSettingsChanged((partial) => {
+        setSettings((prev) => (prev ? { ...prev, ...partial } : prev));
+      }),
     ];
     window.api.getStateSnapshot().then((snapshot) => {
       setRoster(snapshot.roster);
@@ -200,6 +204,8 @@ export default function ChatView() {
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
   const chatCollapsed = settings?.chatCollapsed ?? false;
+  const fontOption = resolveFontOption(settings?.chatFontFamily ?? DEFAULT_FONT_ID);
+  const borderOption = resolveBorderOption(settings?.chatBorderStyle ?? DEFAULT_BORDER_ID);
   const colorBySpeaker = Object.fromEntries(
     Object.entries(profileBySpeaker).map(([id, p]) => [id, { usernameColor: p.usernameColor, chatColor: p.chatColor }]),
   );
@@ -214,7 +220,12 @@ export default function ChatView() {
       onPinToggle={handlePinToggle}
       collapsed={chatCollapsed}
       onCollapsedToggle={handleCollapsedToggle}
-      panelStyle={{ backgroundColor: `rgba(13, 14, 17, ${chatOpacity})` }}
+      panelStyle={{
+        backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,
+        '--chat-font-family': fontOption.cssFontFamily,
+        '--chat-border-width': `${borderOption.borderWidth}px`,
+        '--chat-border-radius': `${borderOption.borderRadius}px`,
+      }}
       opacity={chatOpacity}
       onOpacityChange={handleOpacityChange}
       header={
