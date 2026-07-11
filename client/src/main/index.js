@@ -525,6 +525,7 @@ app.on('window-all-closed', () => {
 
 let updaterOpenedAt = 0;
 const MIN_UPDATER_MS = 1000;
+let didTransitionToLauncher = false;
 
 function createUpdaterWindow() {
   updaterOpenedAt = Date.now();
@@ -550,6 +551,8 @@ function createUpdaterWindow() {
 }
 
 function transitionToLauncher() {
+  if (didTransitionToLauncher) return;
+  didTransitionToLauncher = true;
   const elapsed = Date.now() - updaterOpenedAt;
   const remaining = Math.max(0, MIN_UPDATER_MS - elapsed);
   setTimeout(() => {
