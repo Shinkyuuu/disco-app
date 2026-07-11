@@ -27,6 +27,8 @@ function ChatFrame({
   onChatSizeChange,
   pinned,
   onPinToggle,
+  collapsed = false,
+  onCollapsedToggle,
   panelStyle,
   opacity,
   onOpacityChange,
@@ -35,7 +37,7 @@ function ChatFrame({
   return (
     <div className="chat-root">
       <div className={`chat-header chat-header--${avatarSize}`}>{header}</div>
-      <div className={`chat-panel ${panelClass}`.trim()} style={panelStyle}>
+      <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
         <WindowMenu
           avatarSize={onAvatarSizeChange ? avatarSize : undefined}
           onAvatarSizeChange={onAvatarSizeChange}
@@ -43,10 +45,12 @@ function ChatFrame({
           onChatSizeChange={onChatSizeChange}
           pinned={pinned}
           onPinToggle={onPinToggle}
+          collapsed={collapsed}
+          onCollapsedToggle={onCollapsedToggle}
           opacity={opacity}
           onOpacityChange={onOpacityChange}
         />
-        {children}
+        {!collapsed && children}
       </div>
     </div>
   );
@@ -103,6 +107,11 @@ export default function ChatView() {
   function handleOpacityChange(chatOpacity) {
     setSettings((prev) => (prev ? { ...prev, chatOpacity } : prev));
     window.api.setSettings({ chatOpacity });
+  }
+
+  function handleCollapsedToggle(chatCollapsed) {
+    setSettings((prev) => (prev ? { ...prev, chatCollapsed } : prev));
+    window.api.setSettings({ chatCollapsed });
   }
 
   useEffect(() => {
@@ -190,6 +199,7 @@ export default function ChatView() {
   const avatarMode = settings?.avatarMode ?? 'discord';
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
+  const chatCollapsed = settings?.chatCollapsed ?? false;
   const colorBySpeaker = Object.fromEntries(
     Object.entries(profileBySpeaker).map(([id, p]) => [id, { usernameColor: p.usernameColor, chatColor: p.chatColor }]),
   );
@@ -202,6 +212,8 @@ export default function ChatView() {
       onChatSizeChange={handleChatSizeChange}
       pinned={pinned}
       onPinToggle={handlePinToggle}
+      collapsed={chatCollapsed}
+      onCollapsedToggle={handleCollapsedToggle}
       panelStyle={{ backgroundColor: `rgba(13, 14, 17, ${chatOpacity})` }}
       opacity={chatOpacity}
       onOpacityChange={handleOpacityChange}

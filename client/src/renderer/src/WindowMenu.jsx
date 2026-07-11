@@ -43,7 +43,8 @@ function SizeSubmenu({ label, name, value, onChange, openSubmenu, setOpenSubmenu
 // its top-right corner; the dropdown's Exit closes the window it lives in.
 // `avatarSize`/`onAvatarSizeChange` and `chatSize`/`onChatSizeChange` are
 // optional - only the chat window passes them, so only its menu gets those
-// items. `pinned`/`onPinToggle` are likewise chat-window-only.
+// items. `pinned`/`onPinToggle` and `collapsed`/`onCollapsedToggle` are
+// likewise chat-window-only.
 export default function WindowMenu({
   avatarSize,
   onAvatarSizeChange,
@@ -51,6 +52,8 @@ export default function WindowMenu({
   onChatSizeChange,
   pinned,
   onPinToggle,
+  collapsed,
+  onCollapsedToggle,
   opacity,
   onOpacityChange,
 }) {
@@ -126,6 +129,17 @@ export default function WindowMenu({
               }}
             >
               {pinned ? 'Unpin window' : 'Pin window'}
+            </button>
+          )}
+          {onCollapsedToggle && (
+            <button
+              className="window-menu-item"
+              onClick={() => {
+                onCollapsedToggle(!collapsed);
+                setOpen(false);
+              }}
+            >
+              {collapsed ? 'Show chat box' : 'Hide chat box'}
             </button>
           )}
           <button className="window-menu-item" onClick={() => window.close()}>
