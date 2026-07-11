@@ -3,6 +3,13 @@
 @import '@fontsource/plus-jakarta-sans/600.css';
 @import '@fontsource/plus-jakarta-sans/700.css';
 
+@font-face {
+  font-family: 'Determination';
+  src: url('./fonts/Determination/Determination.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -553,8 +560,8 @@ select {
   min-height: 0;
   z-index: 1;
   background: #0d0e11;
-  border: 5px solid #ffffff;
-  border-radius: 0;
+  border: var(--chat-border-width, 5px) solid #ffffff;
+  border-radius: var(--chat-border-radius, 0);
   display: flex;
   flex-direction: column;
 }
@@ -630,6 +637,7 @@ select {
 }
 
 .message-line-username {
+  font-family: var(--chat-font-family, inherit);
   font-weight: 700;
   line-height: 1.3;
 }
@@ -647,6 +655,7 @@ select {
 }
 
 .message-line-text {
+  font-family: var(--chat-font-family, inherit);
   line-height: 1.35;
   word-break: break-word;
 }
@@ -862,6 +871,43 @@ select {
 }
 .pf-btn--muted:hover {
   background: #3a3b42;
+}
+
+.chat-appearance-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.chat-appearance-fields .settings-field {
+  margin-bottom: 0;
+  gap: 10px;
+}
+
+.option-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-picker-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #ffffff;
+  opacity: 0.6;
+  transition: opacity 150ms ease;
+}
+
+.option-picker-tile:hover,
+.option-picker-tile--active {
+  background: #46474f;
+  opacity: 1;
 }
 
 /* default slot rows */

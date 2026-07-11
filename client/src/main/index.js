@@ -352,6 +352,8 @@ function registerIpcHandlers() {
     chatSize: store.get('chatSize'),
     chatOpacity: store.get('chatOpacity'),
     chatCollapsed: store.get('chatCollapsed'),
+    chatFontFamily: store.get('chatFontFamily'),
+    chatBorderStyle: store.get('chatBorderStyle'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
     appVersion: app.getVersion(),
@@ -366,6 +368,13 @@ function registerIpcHandlers() {
     // (or would clip) until the next time the window happens to be recreated.
     if (('avatarSize' in partial || 'chatCollapsed' in partial) && chatWindow) {
       applyChatWindowSize(chatWindow);
+    }
+    // Font/border are picked from the launcher's Settings page - a separate
+    // renderer process from the chat window - so push the change through so
+    // an already-open chat window updates live instead of waiting for its
+    // next reopen (getSettings is otherwise only read once, on mount).
+    if (('chatFontFamily' in partial || 'chatBorderStyle' in partial) && chatWindow) {
+      chatWindow.webContents.send('settings-changed', partial);
     }
   });
 
