@@ -7,6 +7,7 @@ export const store = new Store({
     avatarSize: 'small',
     chatSize: 'medium',
     chatOpacity: 1,
+    chatCollapsed: false,
     chatWindowWidth: 480,
     chatWindowPanelHeight: 324,
     sessionToken: null,
