@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { WebSocketServer } from 'ws';
 import { createWsClient } from './wsClient.js';
 
@@ -63,4 +64,25 @@ test('reconnects automatically after a non-auth close', async () => {
   assert.ok(connectionCount >= 2);
   client.close();
   wss.close();
+});
+
+test('does not crash the process on a non-101 handshake response (e.g. a 502 from a proxy)', async () => {
+  // A plain HTTP server that never upgrades the connection - ws sees a non-101
+  // response and emits 'error' ("Unexpected server response: 502"), which with
+  // no listener is an uncaught exception that kills the whole process.
+  const server = http.createServer((req, res) => {
+    res.writeHead(502);
+    res.end();
+  });
+  await new Promise((resolve) => server.listen(0, resolve));
+  const port = server.address().port;
+
+  const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok', reconnectBaseDelayMs: 10 });
+  // Reaching a 'close' event at all (rather than the process crashing first)
+  // is the assertion - a failed handshake surfaces as an abnormal closure.
+  const [code] = await new Promise((resolve) => client.on('close', (c, r) => resolve([c, r])));
+  assert.equal(code, 1006);
+
+  client.close();
+  server.close();
 });

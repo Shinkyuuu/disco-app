@@ -21,6 +21,15 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
       emitter.emit('open');
     });
 
+    // A failed handshake (e.g. a 502 from a proxy while the server is down or
+    // restarting) is an 'error' event with no listener by default - Node
+    // throws and kills the whole Electron main process. Log it and let the
+    // 'close' handler below (which always follows) drive the existing
+    // reconnect-with-backoff flow.
+    socket.on('error', (err) => {
+      console.error('WebSocket error:', err);
+    });
+
     socket.on('message', (data) => {
       let msg;
       try {
