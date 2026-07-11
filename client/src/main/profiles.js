@@ -11,13 +11,17 @@ const MIME_BY_EXT = {
   '.gif': 'image/gif',
 };
 
-function avatarsRoot() {
+function bundledAvatarsRoot() {
   return path.join(app.getAppPath(), 'resources', 'avatars');
 }
 
-function scopeDir(scope, id) {
+function userAvatarsRoot() {
+  return path.join(app.getPath('userData'), 'avatars');
+}
+
+function scopeDir(root, scope, id) {
   const sub = scope === 'friend' ? 'friends' : 'defaults';
-  return path.join(avatarsRoot(), sub, id);
+  return path.join(root, sub, id);
 }
 
 // Find silent.* / speaking.* by basename; return absolute path or null.
@@ -29,8 +33,11 @@ function findAvatarFile(dir, kind) {
   return null;
 }
 
-function readAvatarDataUrl(dir, kind) {
-  const file = findAvatarFile(dir, kind);
+// Check user-overridden images first, then fall back to bundled app resources.
+function readAvatarDataUrl(scope, id, kind) {
+  const file =
+    findAvatarFile(scopeDir(userAvatarsRoot(), scope, id), kind) ??
+    findAvatarFile(scopeDir(bundledAvatarsRoot(), scope, id), kind);
   if (!file) return null;
   const mime = MIME_BY_EXT[path.extname(file).toLowerCase()] ?? 'application/octet-stream';
   const b64 = fs.readFileSync(file).toString('base64');
@@ -42,10 +49,9 @@ function slotDirName(slotIndex) {
 }
 
 function readImagesFor(scope, id) {
-  const dir = scopeDir(scope, id);
   return {
-    avatarSilent: readAvatarDataUrl(dir, 'silent'),
-    avatarSpeaking: readAvatarDataUrl(dir, 'speaking'),
+    avatarSilent: readAvatarDataUrl(scope, id, 'silent'),
+    avatarSpeaking: readAvatarDataUrl(scope, id, 'speaking'),
   };
 }
 
@@ -73,14 +79,16 @@ export function seedDefaultProfileColors(store) {
 }
 
 export function reconcileFriendProfiles(store) {
-  const friendsDir = path.join(avatarsRoot(), 'friends');
-  if (!fs.existsSync(friendsDir)) return;
   const friendProfiles = { ...store.get('friendProfiles') };
   let changed = false;
-  for (const entry of fs.readdirSync(friendsDir, { withFileTypes: true })) {
-    if (entry.isDirectory() && !(entry.name in friendProfiles)) {
-      friendProfiles[entry.name] = { usernameColor: null, chatColor: null };
-      changed = true;
+  for (const root of [bundledAvatarsRoot(), userAvatarsRoot()]) {
+    const friendsDir = path.join(root, 'friends');
+    if (!fs.existsSync(friendsDir)) continue;
+    for (const entry of fs.readdirSync(friendsDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && !(entry.name in friendProfiles)) {
+        friendProfiles[entry.name] = { usernameColor: null, chatColor: null };
+        changed = true;
+      }
     }
   }
   if (changed) store.set('friendProfiles', friendProfiles);
@@ -140,7 +148,7 @@ export async function pickAvatarImage({ scope, id, kind }) {
   const ext = path.extname(source).toLowerCase();
   if (!IMAGE_EXTENSIONS.includes(ext)) return null;
 
-  const dir = scopeDir(scope, id);
+  const dir = scopeDir(userAvatarsRoot(), scope, id);
   fs.mkdirSync(dir, { recursive: true });
   // Delete any existing kind.* of a different extension so there's no ambiguity.
   for (const existingExt of IMAGE_EXTENSIONS) {
@@ -148,11 +156,11 @@ export async function pickAvatarImage({ scope, id, kind }) {
     if (existingExt !== ext && fs.existsSync(existing)) fs.rmSync(existing);
   }
   fs.copyFileSync(source, path.join(dir, `${kind}${ext}`));
-  return readAvatarDataUrl(dir, kind);
+  return readAvatarDataUrl(scope, id, kind);
 }
 
 export function clearAvatarImage({ scope, id, kind }) {
-  const dir = scopeDir(scope, id);
+  const dir = scopeDir(userAvatarsRoot(), scope, id);
   for (const ext of IMAGE_EXTENSIONS) {
     const file = path.join(dir, `${kind}${ext}`);
     if (fs.existsSync(file)) fs.rmSync(file);
@@ -186,6 +194,6 @@ export function removeFriendProfile(store, userId) {
   const friendProfiles = { ...store.get('friendProfiles') };
   delete friendProfiles[userId];
   store.set('friendProfiles', friendProfiles);
-  const dir = scopeDir('friend', userId);
+  const dir = scopeDir(userAvatarsRoot(), 'friend', userId);
   if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
 }
