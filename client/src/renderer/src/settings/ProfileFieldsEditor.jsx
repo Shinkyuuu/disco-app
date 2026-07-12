@@ -36,7 +36,7 @@ function AvatarField({ label, src, onPick, onClear }) {
 // instant while debouncing which value actually gets committed upstream.
 const COLOR_COMMIT_DEBOUNCE_MS = 200;
 
-function ColorField({ label, value, onSet, onClear }) {
+function ColorField({ label, value, onSet, onClear, exampleText, exampleClassName }) {
   const [localValue, setLocalValue] = useState(value);
   // Render-phase state adjustment (not an effect) for "local state should reset
   // when this prop changes" - see https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes.
@@ -56,8 +56,8 @@ function ColorField({ label, value, onSet, onClear }) {
   }
 
   return (
-    <div className="pf-field">
-      <span className="pf-label">{label}</span>
+    <div className="pf-color-row">
+      <span className="pf-label pf-color-row-label">{label}</span>
       <label
         className={`pf-swatch ${localValue ? '' : 'pf-swatch--empty'}`.trim()}
         style={localValue ? { background: localValue } : undefined}
@@ -70,6 +70,9 @@ function ColorField({ label, value, onSet, onClear }) {
           onChange={(e) => handleChange(e.target.value)}
         />
       </label>
+      <span className={`${exampleClassName} pf-color-example`} style={localValue ? { color: localValue } : undefined}>
+        {exampleText}
+      </span>
       <div className="pf-actions">
         {localValue && (
           <button className="pf-btn pf-btn--muted" onClick={onClear}>
@@ -84,30 +87,38 @@ function ColorField({ label, value, onSet, onClear }) {
 export default function ProfileFieldsEditor({ layout, profile, onPickAvatar, onClearAvatar, onSetColor, onClearColor }) {
   return (
     <div className={`profile-fields profile-fields--${layout}`}>
-      <AvatarField
-        label="Silent"
-        src={profile.avatarSilent}
-        onPick={() => onPickAvatar('silent')}
-        onClear={() => onClearAvatar('silent')}
-      />
-      <AvatarField
-        label="Speaking"
-        src={profile.avatarSpeaking}
-        onPick={() => onPickAvatar('speaking')}
-        onClear={() => onClearAvatar('speaking')}
-      />
-      <ColorField
-        label="Name color"
-        value={profile.usernameColor}
-        onSet={(v) => onSetColor('usernameColor', v)}
-        onClear={() => onClearColor('usernameColor')}
-      />
-      <ColorField
-        label="Chat color"
-        value={profile.chatColor}
-        onSet={(v) => onSetColor('chatColor', v)}
-        onClear={() => onClearColor('chatColor')}
-      />
+      <div className="pf-avatars">
+        <AvatarField
+          label="Silent"
+          src={profile.avatarSilent}
+          onPick={() => onPickAvatar('silent')}
+          onClear={() => onClearAvatar('silent')}
+        />
+        <AvatarField
+          label="Speaking"
+          src={profile.avatarSpeaking}
+          onPick={() => onPickAvatar('speaking')}
+          onClear={() => onClearAvatar('speaking')}
+        />
+      </div>
+      <div className="pf-colors">
+        <ColorField
+          label="Name color"
+          value={profile.usernameColor}
+          onSet={(v) => onSetColor('usernameColor', v)}
+          onClear={() => onClearColor('usernameColor')}
+          exampleText="Username"
+          exampleClassName="message-line-username message-line-username--medium"
+        />
+        <ColorField
+          label="Chat color"
+          value={profile.chatColor}
+          onSet={(v) => onSetColor('chatColor', v)}
+          onClear={() => onClearColor('chatColor')}
+          exampleText="This is what your captions will look like."
+          exampleClassName="message-line-text message-line-text--medium"
+        />
+      </div>
     </div>
   );
 }

@@ -6,7 +6,7 @@ export default function YourProfileSection({ loggedInUserId, profile, onChange }
   if (!loggedInUserId) {
     return (
       <>
-        <h3 className="settings-heading">Your Profile</h3>
+        <h3 className="settings-heading settings-heading--profile">Your Profile</h3>
         <section className="settings-section your-profile your-profile--disabled">
           <p className="settings-subtext">Log in to configure your own profile.</p>
         </section>
@@ -22,7 +22,7 @@ export default function YourProfileSection({ loggedInUserId, profile, onChange }
 
   return (
     <>
-      <h3 className="settings-heading">Your Profile</h3>
+      <h3 className="settings-heading settings-heading--profile">Your Profile</h3>
       <section className="settings-section your-profile">
         <ProfileFieldsEditor
           layout="card"
