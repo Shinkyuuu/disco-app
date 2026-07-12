@@ -335,14 +335,13 @@ function createChatMenuWindow(anchor, sections) {
     transparent: true,
     resizable: false,
     movable: false,
-    // Shown immediately (not the usual show:false + 'ready-to-show' dance) -
-    // x/y/width/height are already fully known up front here, unlike windows
-    // that size themselves to measured content, so there's no flash of
-    // wrong-sized content to hide. Windows applies its own fade to a
-    // transparent window's *visibility transitions*, so showing it as part
-    // of creation rather than as a separate later show() call avoids that
-    // transition entirely, instead of merely hiding it behind a delay.
-    show: true,
+    // Same show:false + 'ready-to-show' pattern as launcherWindow/updaterWindow
+    // above - showing immediately (before Chromium's first paint) let Windows
+    // present the OS window surface as opaque white first, which then flashed
+    // to transparent and finally to the real dropdown content once
+    // ChatMenuView's async settings fetch resolved - visible as an open/close/
+    // reopen flicker with a white flash in between.
+    show: false,
     skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -351,6 +350,7 @@ function createChatMenuWindow(anchor, sections) {
     },
   });
   chatMenuWindow.setAlwaysOnTop(true, 'screen-saver');
+  chatMenuWindow.once('ready-to-show', () => chatMenuWindow?.show());
   chatMenuWindow.loadURL(rendererUrl('chat-menu') + '&' + menuSectionsQuery(sections) + `&openDirection=${opensBelow ? 'down' : 'up'}`);
   // Losing focus means the user clicked elsewhere (the chat window, another
   // app, the desktop) - same dismissal a normal dropdown gets from a
