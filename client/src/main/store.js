@@ -8,6 +8,7 @@ export const store = new Store({
     chatSize: 'medium',
     chatOpacity: 1,
     chatCollapsed: false,
+    chatLocked: false,
     chatFontFamily: 'plus-jakarta-sans',
     chatBorderStyle: 'hard',
     chatWindowWidth: 480,
