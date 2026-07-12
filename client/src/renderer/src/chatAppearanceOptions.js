@@ -14,6 +14,11 @@ export const FONT_OPTIONS = [
     label: 'Determination',
     cssFontFamily: "'Determination', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
   },
+  {
+    id: 'nintendo-ds',
+    label: 'Nintendo DS',
+    cssFontFamily: "'Nintendo DS', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
+  },
 ];
 
 export const BORDER_OPTIONS = [
