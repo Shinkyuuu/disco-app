@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
 import { store } from './store.js';
 import { chatWindowHeightFor, HEADER_HEIGHT_BY_AVATAR_SIZE, MIN_CHAT_PANEL_HEIGHT } from './chatWindowSize.js';
+import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
 import { createWsClient } from './wsClient.js';
 import { schemeFor } from './serverScheme.js';
 import { fetchProfile, AuthError } from './profileClient.js';
@@ -37,12 +38,6 @@ const ICON_PATH = path.join(app.getAppPath(), 'resources', 'icon.png');
 // sizes so the message log doesn't shrink - only the window grows upward.
 const CHAT_WINDOW_WIDTH = 480;
 
-// While collapsed, the ⋯ menu's dropdown needs the same room it gets in
-// expanded mode - the window temporarily grows to at least this panel
-// height while the menu is open (see 'set-chat-menu-open' below), even if
-// the user's real saved panel height is smaller.
-const MENU_OPEN_PANEL_HEIGHT_FLOOR = 300;
-
 // Chromium's setMaximumSize(0, 0) means "no maximum" - but that sentinel
 // only applies when BOTH dimensions are 0 (extensions::SizeConstraints::
 // HasMaximumSize() is `width != 0 || height != 0`). Locking max height while
@@ -57,6 +52,10 @@ const NO_MAX_WIDTH = 2147483647;
 let updaterWindow = null;
 let launcherWindow = null;
 let chatWindow = null;
+// The ⋯ menu's dropdown - a separate always-on-top popup rather than content
+// inside chatWindow, so opening it never has to resize or move the chat
+// window itself (see createChatMenuWindow below).
+let chatMenuWindow = null;
 let pendingAuthToken = null;
 let pendingAuthError = null;
 let deferredOpenUrl = null;
@@ -181,8 +180,7 @@ function stopProfilePolling() {
 // CSS thin bar; while expanded, the normal min height is restored and the
 // max height is uncapped. Width comes from the window's own current size,
 // not the persisted chatWindowWidth - this can run right after the user
-// finishes a drag-resize (e.g. releasing the mouse outside the ⋯ dropdown
-// also closes it), and the 'resized' listener's store write is not
+// finishes a drag-resize, and the 'resized' listener's store write is not
 // guaranteed to have landed yet at that point.
 function applyChatWindowSize(win) {
   const avatarSize = store.get('avatarSize');
@@ -231,9 +229,15 @@ function createChatWindow() {
   // 'screen-saver' is the highest always-on-top level Electron exposes; the
   // default 'floating' level can still lose the z-order fight against
   // fullscreen games. Reasserting on blur covers games that re-grab the top
-  // of the z-order themselves when they regain focus after a click on the overlay.
+  // of the z-order themselves when they regain focus after a click on the
+  // overlay - but skip it while the ⋯ menu popup is open: that popup taking
+  // focus is what triggers this blur in the first place, and reasserting
+  // chatWindow's own always-on-top here would re-raise it back above the
+  // popup, leaving the popup rendered behind chatWindow and unable to
+  // receive the clicks/hovers meant for it.
   chatWindow.setAlwaysOnTop(true, 'screen-saver');
   chatWindow.on('blur', () => {
+    if (chatMenuWindow) return;
     if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
   });
   chatWindow.on('resized', () => {
@@ -250,9 +254,76 @@ function createChatWindow() {
   chatWindow.loadURL(rendererUrl('chat'));
   chatWindow.on('closed', () => {
     chatWindow = null;
+    chatMenuWindow?.close();
     if (launcherWindow) launcherWindow.show();
   });
   if (launcherWindow) launcherWindow.hide();
+}
+
+// The ⋯ menu's dropdown, as its own small always-on-top popup rather than
+// content clipped inside chatWindow - Electron clips all rendered content to
+// a window's own rect, so a dropdown that needs more room than the (possibly
+// collapsed, thin-bar-sized) chat window currently has would otherwise force
+// resizing/moving the chat window itself just to show it. A second click on
+// ⋯ while the popup is open toggles it closed, matching a normal dropdown.
+// `anchor` is the ⋯ button's own screen rect (renderer-measured, since the
+// main process only knows the chat window's rect, not where the button sits
+// within it) and `sections` mirrors which optional props WindowMenu received,
+// so the popup shows the same items the inline dropdown used to.
+function createChatMenuWindow(anchor, sections) {
+  if (chatMenuWindow) {
+    chatMenuWindow.close();
+    return;
+  }
+  const size = { width: MENU_POPUP_WIDTH, height: chatMenuHeightFor(sections) };
+  const workArea = screen.getDisplayMatching(anchor).workArea;
+  const { x, y, opensBelow } = chatMenuPositionFor(anchor, size, workArea);
+
+  chatMenuWindow = new BrowserWindow({
+    x,
+    y,
+    width: size.width,
+    height: size.height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    // Shown immediately (not the usual show:false + 'ready-to-show' dance) -
+    // x/y/width/height are already fully known up front here, unlike windows
+    // that size themselves to measured content, so there's no flash of
+    // wrong-sized content to hide. Windows applies its own fade to a
+    // transparent window's *visibility transitions*, so showing it as part
+    // of creation rather than as a separate later show() call avoids that
+    // transition entirely, instead of merely hiding it behind a delay.
+    show: true,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  chatMenuWindow.setAlwaysOnTop(true, 'screen-saver');
+  chatMenuWindow.loadURL(rendererUrl('chat-menu') + '&' + menuSectionsQuery(sections) + `&openDirection=${opensBelow ? 'down' : 'up'}`);
+  // Losing focus means the user clicked elsewhere (the chat window, another
+  // app, the desktop) - same dismissal a normal dropdown gets from a
+  // click-outside handler, just expressed at the window level since this
+  // menu no longer shares a window with anything else to attach one to.
+  chatMenuWindow.on('blur', () => chatMenuWindow?.close());
+  chatMenuWindow.on('closed', () => {
+    chatMenuWindow = null;
+    // Restore the reassert-on-blur behavior skipped above while this popup
+    // was open, in case something else (e.g. a game regaining focus) needs
+    // to be pushed back below the chat window now that the popup is gone.
+    if (chatWindow?.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
+  });
+}
+
+function menuSectionsQuery(sections) {
+  return Object.entries(sections)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => `${key}=1`)
+    .join('&');
 }
 
 function logout() {
@@ -379,13 +450,15 @@ function registerIpcHandlers() {
       chatWindow.setMovable(!partial.chatLocked);
       chatWindow.setResizable(!partial.chatLocked);
     }
-    // Font/border are picked from the launcher's Settings page - a separate
-    // renderer process from the chat window - so push the change through so
-    // an already-open chat window updates live instead of waiting for its
-    // next reopen (getSettings is otherwise only read once, on mount).
-    if (('chatFontFamily' in partial || 'chatBorderStyle' in partial) && chatWindow) {
-      chatWindow.webContents.send('settings-changed', partial);
-    }
+    // getSettings is only read once, on mount, by every renderer - push every
+    // change through so an already-open chat window (and its ⋯ menu popup,
+    // if open) update live instead of waiting for their next reopen. Needed
+    // both for the launcher's Settings page (font/border - a separate
+    // renderer process from the chat window) and for the ⋯ menu popup, which
+    // is also a separate renderer process from the chat window it changes
+    // avatarSize/chatSize/chatOpacity/chatCollapsed/chatLocked for.
+    if (chatWindow) chatWindow.webContents.send('settings-changed', partial);
+    if (chatMenuWindow) chatMenuWindow.webContents.send('settings-changed', partial);
   });
 
   ipcMain.handle('start-chat-window', () => {
@@ -468,33 +541,20 @@ function registerIpcHandlers() {
     BrowserWindow.fromWebContents(event.sender)?.setSize(width, height);
   });
 
-  ipcMain.handle('window-is-always-on-top', (event) => {
-    return BrowserWindow.fromWebContents(event.sender)?.isAlwaysOnTop() ?? false;
+  // Unlike the generic window-chrome controls above, pin state is only ever
+  // about the chat window's own always-on-top-ness - always targets
+  // chatWindow explicitly (rather than the invoking renderer) since the ⋯
+  // menu popup calls this too, to show/toggle the chat window's pin state
+  // from its own, separate renderer process.
+  ipcMain.handle('window-is-always-on-top', () => chatWindow?.isAlwaysOnTop() ?? false);
+
+  ipcMain.handle('window-set-always-on-top', (_event, value) => {
+    chatWindow?.setAlwaysOnTop(value, 'screen-saver');
   });
 
-  ipcMain.handle('window-set-always-on-top', (event, value) => {
-    BrowserWindow.fromWebContents(event.sender)?.setAlwaysOnTop(value, 'screen-saver');
-  });
+  ipcMain.handle('close-chat-window', () => chatWindow?.close());
 
-  // While collapsed, the chat window is locked to the thin bar - opening the
-  // ⋯ dropdown there would render outside the window's bounds and get
-  // clipped (Electron clips all content to the window's rect). Temporarily
-  // grow to (at least) a normal expanded size while the menu is open, then
-  // shrink back to the locked thin-bar size when it closes. No-op outside
-  // collapsed mode, where the dropdown already has room.
-  ipcMain.handle('set-chat-menu-open', (_event, isOpen) => {
-    if (!chatWindow || !store.get('chatCollapsed')) return;
-    if (isOpen) {
-      const avatarSize = store.get('avatarSize');
-      const panelHeight = Math.max(store.get('chatWindowPanelHeight'), MENU_OPEN_PANEL_HEIGHT_FLOOR);
-      const height = chatWindowHeightFor(avatarSize, { collapsed: false, panelHeight });
-      const [currentWidth] = chatWindow.getSize();
-      chatWindow.setMaximumSize(0, 0);
-      chatWindow.setSize(currentWidth, height);
-    } else {
-      applyChatWindowSize(chatWindow);
-    }
-  });
+  ipcMain.handle('open-chat-menu', (_event, { anchor, sections }) => createChatMenuWindow(anchor, sections));
 }
 
 function rendererUrl(view) {

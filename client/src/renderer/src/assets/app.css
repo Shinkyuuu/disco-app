@@ -118,15 +118,35 @@ select {
   background: #46474f;
 }
 
+/* Renders in its own popup window (see ChatMenuView/createChatMenuWindow),
+   not positioned relative to .window-menu anymore - .chat-menu-popup below
+   handles placement within that window instead. */
 .window-menu-dropdown {
-  position: absolute;
-  right: 0;
-  top: 26px;
   background: #26272d;
   border: 1px solid #3a3b42;
   border-radius: 6px;
   overflow: visible; /* the avatar-size submenu extends past this box's left edge */
   min-width: 120px;
+}
+
+/* The popup window is wider than the dropdown itself, reserving room on the
+   left for the avatar-size/chat-size submenus (which open further left on
+   hover) - right-align the dropdown within it, matching how it used to hang
+   from the ⋯ button's right edge. Vertically, flush the dropdown against
+   whichever edge is adjacent to the button: top when the popup opened below
+   it, bottom when it opened above (see openDirection in ChatMenuView). */
+.chat-menu-popup {
+  display: flex;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.chat-menu-popup--down {
+  align-items: flex-start;
+}
+
+.chat-menu-popup--up {
+  align-items: flex-end;
 }
 
 .window-menu-item {
@@ -570,11 +590,7 @@ select {
    collapsed there's no chat bar at all, just the header's avatars and the
    floating ⋯ button (see .window-menu above, which anchors to this panel's
    top edge regardless of its height). Still present in the DOM rather than
-   unmounted so .window-menu has a positioned ancestor to float above, and
-   so it stays visually empty even while the window is temporarily grown for
-   the ⋯ dropdown (see 'set-chat-menu-open' in main/index.js) - otherwise
-   flex: 1 would stretch this box to fill the grown window, making the
-   collapsed state look like it un-collapsed while the menu is open. */
+   unmounted so .window-menu has a positioned ancestor to float above. */
 .chat-panel--collapsed {
   flex: none;
   height: 0;

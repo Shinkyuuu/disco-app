@@ -19,42 +19,15 @@ function mergeEntries(current, incoming) {
 
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
-function ChatFrame({
-  header = null,
-  panelClass = '',
-  avatarSize = 'small',
-  onAvatarSizeChange,
-  chatSize,
-  onChatSizeChange,
-  pinned,
-  onPinToggle,
-  collapsed = false,
-  onCollapsedToggle,
-  locked,
-  onLockToggle,
-  panelStyle,
-  opacity,
-  onOpacityChange,
-  children,
-}) {
+// menuSections mirrors which items the ⋯ menu's popup should include (see
+// WindowMenu/ChatMenuView) - only the normal, non-error render below passes
+// any; the error-state renders further down pass none, leaving just Exit.
+function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', collapsed = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
       <div className={`chat-header chat-header--${avatarSize}`}>{header}</div>
       <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
-        <WindowMenu
-          avatarSize={onAvatarSizeChange ? avatarSize : undefined}
-          onAvatarSizeChange={onAvatarSizeChange}
-          chatSize={onChatSizeChange ? chatSize : undefined}
-          onChatSizeChange={onChatSizeChange}
-          pinned={pinned}
-          onPinToggle={onPinToggle}
-          collapsed={collapsed}
-          onCollapsedToggle={onCollapsedToggle}
-          opacity={opacity}
-          onOpacityChange={onOpacityChange}
-          locked={locked}
-          onLockToggle={onLockToggle}
-        />
+        <WindowMenu sections={menuSections} />
         {!collapsed && children}
       </div>
     </div>
@@ -75,7 +48,6 @@ export default function ChatView() {
   // set before assigning slots (loaded once into friendIds).
   const [profileBySpeaker, setProfileBySpeaker] = useState({});
   const [friendIds, setFriendIds] = useState(null); // null = not loaded yet
-  const [pinned, setPinned] = useState(true);
   const requestedRef = useRef(new Set());
   const slotCounterRef = useRef(0);
 
@@ -96,42 +68,6 @@ export default function ChatView() {
       });
     }
   }, [roster, friendIds]);
-
-  function handleAvatarSizeChange(avatarSize) {
-    // Optimistic - the main process resizes the window in lockstep with this
-    // same call, so waiting for a round trip would visibly lag the resize.
-    setSettings((prev) => (prev ? { ...prev, avatarSize } : prev));
-    window.api.setSettings({ avatarSize });
-  }
-
-  function handleChatSizeChange(chatSize) {
-    setSettings((prev) => (prev ? { ...prev, chatSize } : prev));
-    window.api.setSettings({ chatSize });
-  }
-
-  function handleOpacityChange(chatOpacity) {
-    setSettings((prev) => (prev ? { ...prev, chatOpacity } : prev));
-    window.api.setSettings({ chatOpacity });
-  }
-
-  function handleCollapsedToggle(chatCollapsed) {
-    setSettings((prev) => (prev ? { ...prev, chatCollapsed } : prev));
-    window.api.setSettings({ chatCollapsed });
-  }
-
-  function handleLockToggle(chatLocked) {
-    setSettings((prev) => (prev ? { ...prev, chatLocked } : prev));
-    window.api.setSettings({ chatLocked });
-  }
-
-  useEffect(() => {
-    window.api.isAlwaysOnTop().then(setPinned);
-  }, []);
-
-  function handlePinToggle(value) {
-    setPinned(value);
-    window.api.setAlwaysOnTop(value);
-  }
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
@@ -213,7 +149,6 @@ export default function ChatView() {
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
   const chatCollapsed = settings?.chatCollapsed ?? false;
-  const chatLocked = settings?.chatLocked ?? false;
   const fontOption = resolveFontOption(settings?.chatFontFamily ?? DEFAULT_FONT_ID);
   const borderOption = resolveBorderOption(settings?.chatBorderStyle ?? DEFAULT_BORDER_ID);
   const colorBySpeaker = Object.fromEntries(
@@ -223,23 +158,14 @@ export default function ChatView() {
   return (
     <ChatFrame
       avatarSize={avatarSize}
-      onAvatarSizeChange={handleAvatarSizeChange}
-      chatSize={chatSize}
-      onChatSizeChange={handleChatSizeChange}
-      pinned={pinned}
-      onPinToggle={handlePinToggle}
       collapsed={chatCollapsed}
-      onCollapsedToggle={handleCollapsedToggle}
-      locked={chatLocked}
-      onLockToggle={handleLockToggle}
+      menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true }}
       panelStyle={{
         backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,
         '--chat-font-family': fontOption.cssFontFamily,
         '--chat-border-width': `${borderOption.borderWidth}px`,
         '--chat-border-radius': `${borderOption.borderRadius}px`,
       }}
-      opacity={chatOpacity}
-      onOpacityChange={handleOpacityChange}
       header={
         <SpeakerStrip
           roster={roster}
