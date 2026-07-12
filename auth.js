@@ -1,27 +1,65 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SESSION_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const EXCHANGE_CODE_TTL_MS = 60 * 1000; // 60s - just long enough for the OS to launch the disco:// link and the app to redeem it
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// The same icon the Electron client uses for its own windows (client/src/main/index.js's
+// ICON_PATH) - read once at startup since it's a small, static file that never changes at
+// runtime.
+const ICON_BUFFER = fs.readFileSync(path.join(__dirname, 'client', 'resources', 'icon.png'));
+
+export function handleAuthIcon(req, res) {
+  res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+  res.end(ICON_BUFFER);
+}
+
+const SESSION_TOKEN_TTL_MS = 6 * 30 * 24 * 60 * 60 * 1000; // 6 months
+const EXCHANGE_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes - generous margin for the success page to render and the meta-refresh to fire
 const STATE_COOKIE_NAME = 'disco_oauth_state';
 const STATE_COOKIE_MAX_AGE_S = 300; // 5 minutes - generous for a slow OAuth consent screen
 
-// token -> { userId, expiresAt }
-const sessionTokens = new Map();
+// Sessions are self-verifying (payload + HMAC signature), not looked up in any server-side
+// store - a restart must never log users out, and there's nothing here to lose on restart.
+// Trades away the ability to revoke one specific session early (it just expires at the TTL
+// instead), which logout() doesn't do today anyway, so this isn't a regression.
+const { SESSION_SECRET } = process.env;
+if (!SESSION_SECRET) {
+  throw new Error('SESSION_SECRET env var is required to sign session tokens');
+}
+
+function signPayload(payloadB64) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payloadB64).digest('base64url');
+}
 
 export function createSessionToken(userId) {
-  const token = crypto.randomBytes(32).toString('hex');
-  sessionTokens.set(token, { userId, expiresAt: Date.now() + SESSION_TOKEN_TTL_MS });
-  return token;
+  const expiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
+  const payloadB64 = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
+  return `${payloadB64}.${signPayload(payloadB64)}`;
 }
 
 export function verifySessionToken(token) {
-  const entry = sessionTokens.get(token);
-  if (!entry) return null;
-  if (Date.now() >= entry.expiresAt) {
-    sessionTokens.delete(token);
+  if (typeof token !== 'string') return null;
+  const dot = token.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+
+  const expectedSignature = signPayload(payloadB64);
+  const actual = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  // Different-length buffers would make timingSafeEqual throw rather than return false.
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+  } catch {
     return null;
   }
-  return entry.userId;
+  if (!payload || typeof payload.userId !== 'string' || typeof payload.expiresAt !== 'number') return null;
+  if (Date.now() >= payload.expiresAt) return null;
+  return payload.userId;
 }
 
 // code -> { userId, expiresAt }. A single-use, short-lived hand-off between the
@@ -57,6 +95,46 @@ export function buildAuthorizeUrl(state) {
   url.searchParams.set('scope', 'identify');
   url.searchParams.set('state', state);
   return url.toString();
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// A raw 302 straight to the disco:// scheme leaves the browser tab showing nothing of ours -
+// custom-scheme navigations never commit a document, so the tab is just left on whatever last
+// rendered (Discord's own consent screen), with no indication to the user that login succeeded.
+// Serving this page instead gives them that confirmation; the meta-refresh still launches the
+// app automatically, same as the old redirect did.
+//
+// deepLinkUrl is HTML-escaped before being embedded below - it's always built from a hex-only
+// exchange code today so this can't currently matter, but this is a served HTML page, and that
+// value must never be trusted to stay hex-only forever just because it happens to be today.
+export function renderAuthSuccessPage(deepLinkUrl) {
+  const safeUrl = escapeHtml(deepLinkUrl);
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${safeUrl}">
+<title>Disco</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0d0e11; color: #f5f5f5; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+</style>
+</head>
+<body>
+  <div>
+    <img src="/auth/icon.png" alt="Disco" width="64" height="64">
+    <h1>You're logged in to Disco</h1>
+    <p>You can close this tab now.</p>
+  </div>
+</body>
+</html>`;
 }
 
 function parseCookie(cookieHeader, name) {
@@ -151,11 +229,8 @@ export async function handleAuthCallback(req, res) {
     // session token - so the token itself never travels in a URL. See
     // createExchangeCode's comment for why.
     const exchangeCode = createExchangeCode(userId);
-    res.writeHead(302, {
-      Location: `disco://auth?code=${exchangeCode}`,
-      'Set-Cookie': clearStateCookie,
-    });
-    res.end();
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': clearStateCookie });
+    res.end(renderAuthSuccessPage(`disco://auth?code=${encodeURIComponent(exchangeCode)}`));
   } catch (err) {
     console.error('OAuth callback failed:', err);
     res.writeHead(302, { Location: 'disco://auth?error=callback_failed', 'Set-Cookie': clearStateCookie });

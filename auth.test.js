@@ -11,6 +11,8 @@ import {
   handleAuthLogin,
   handleAuthCallback,
   handleAuthExchange,
+  handleAuthIcon,
+  renderAuthSuccessPage,
 } from './auth.js';
 
 function startTestHttpServer(handler) {
@@ -29,12 +31,39 @@ test('verifySessionToken returns null for an unknown token', () => {
   assert.equal(verifySessionToken('not-a-real-token'), null);
 });
 
-test('verifySessionToken returns null and purges an expired token', (t) => {
+test('verifySessionToken returns null once the 6-month TTL has passed', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const token = createSessionToken('user-456');
-  t.mock.timers.tick(4 * 60 * 60 * 1000 + 1); // just past the 4h TTL
+  t.mock.timers.tick(6 * 30 * 24 * 60 * 60 * 1000 + 1); // just past the 6-month TTL
   assert.equal(verifySessionToken(token), null);
-  assert.equal(verifySessionToken(token), null); // purged, not just "expired but still there"
+});
+
+test('verifySessionToken returns null for a token with a tampered payload', () => {
+  const token = createSessionToken('user-456');
+  const [payload, signature] = token.split('.');
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  const tamperedPayload = Buffer.from(JSON.stringify({ ...decoded, userId: 'attacker' })).toString('base64url');
+  assert.equal(verifySessionToken(`${tamperedPayload}.${signature}`), null);
+});
+
+test('verifySessionToken returns null for a token with a tampered signature', () => {
+  const token = createSessionToken('user-456');
+  const [payload, signature] = token.split('.');
+  const tamperedSignature = signature.slice(0, -1) + (signature.at(-1) === 'a' ? 'b' : 'a');
+  assert.equal(verifySessionToken(`${payload}.${tamperedSignature}`), null);
+});
+
+test('verifySessionToken returns null for a malformed token', () => {
+  assert.equal(verifySessionToken('no-dot-in-here'), null);
+  assert.equal(verifySessionToken(''), null);
+});
+
+test('a session token survives a fresh in-memory state - no server-side store to lose on restart', () => {
+  // Regression guard for the original bug: sessions must not depend on any process-lifetime
+  // state. Verifying immediately after creation, with nothing else touched in between, is the
+  // whole point - there is no Map/cache to simulate "restarting" because there must not be one.
+  const token = createSessionToken('user-789');
+  assert.equal(verifySessionToken(token), 'user-789');
 });
 
 test('createExchangeCode then redeemExchangeCode returns the same userId', () => {
@@ -55,8 +84,32 @@ test('redeemExchangeCode returns null for an unknown code', () => {
 test('redeemExchangeCode returns null and purges an expired code', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const code = createExchangeCode('user-2');
-  t.mock.timers.tick(60 * 1000 + 1); // just past the 60s TTL
+  t.mock.timers.tick(5 * 60 * 1000 + 1); // just past the 5-minute TTL
   assert.equal(redeemExchangeCode(code), null);
+});
+
+test('renderAuthSuccessPage HTML-escapes the deep link (defense in depth - exchangeCode is always hex today, but the page must not trust that forever)', () => {
+  const html = renderAuthSuccessPage('disco://auth?code=abc"><script>alert(1)</script>');
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('renderAuthSuccessPage shows the app icon and has no manual fallback link', () => {
+  const html = renderAuthSuccessPage('disco://auth?code=abc123');
+  assert.match(html, /<img[^>]+src="\/auth\/icon\.png"/);
+  assert.doesNotMatch(html, /<a[ >]/i);
+  assert.doesNotMatch(html, /didn't open automatically/i);
+});
+
+test('GET /auth/icon.png serves the app icon as a PNG', async () => {
+  const { server, port } = await startTestHttpServer(handleAuthIcon);
+  const res = await fetch(`http://localhost:${port}/auth/icon.png`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.ok(buf.length > 0);
+  assert.deepEqual(buf.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); // PNG magic bytes
+  server.close();
 });
 
 test('buildAuthorizeUrl includes the required OAuth params, including the CSRF state', () => {
@@ -65,7 +118,8 @@ test('buildAuthorizeUrl includes the required OAuth params, including the CSRF s
   assert.equal(url.searchParams.get('response_type'), 'code');
   assert.equal(url.searchParams.get('scope'), 'identify');
   assert.equal(url.searchParams.get('client_id'), process.env.DISCORD_APPLICATION_ID);
-  assert.equal(url.searchParams.get('redirect_uri'), `http://localhost:${process.env.PORT || 3000}/auth/callback`);
+  const expectedBase = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  assert.equal(url.searchParams.get('redirect_uri'), `${expectedBase}/auth/callback`);
   assert.equal(url.searchParams.get('state'), 'some-state');
 });
 
@@ -112,7 +166,7 @@ test('handleAuthCallback forwards a Discord-side error without needing a matchin
   server.close();
 });
 
-test('handleAuthCallback exchanges a valid state+code for a disco:// redirect carrying a one-time exchange code (not the bearer token)', async (t) => {
+test('handleAuthCallback on success renders an HTML page (so the user sees confirmation, not a silent redirect) carrying a one-time exchange code (not the bearer token)', async (t) => {
   const realFetch = globalThis.fetch;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     const href = String(url);
@@ -130,12 +184,18 @@ test('handleAuthCallback exchanges a valid state+code for a disco:// redirect ca
     redirect: 'manual',
     headers: { Cookie: 'disco_oauth_state=right' },
   });
-  assert.equal(res.status, 302);
-  const location = new URL(res.headers.get('location'));
-  assert.equal(location.protocol, 'disco:');
-  assert.equal(location.searchParams.get('token'), null); // the bearer token itself must never appear in a URL
-  const exchangeCode = location.searchParams.get('code');
-  assert.ok(exchangeCode);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/html/);
+  const setCookie = res.headers.get('set-cookie');
+  assert.match(setCookie, /disco_oauth_state=;/);
+  assert.match(setCookie, /Max-Age=0/);
+  const body = await res.text();
+  assert.match(body, /logged in/i); // the actual confirmation text the user is missing today
+  const deepLink = body.match(/disco:\/\/auth\?code=([^"'\s]+)/);
+  assert.ok(deepLink, 'expected a disco:// deep link embedded in the success page');
+  assert.doesNotMatch(body, /token=/); // the bearer token itself must never appear in a URL
+  assert.doesNotMatch(body, /fake-access-token/); // nor the literal access token this test's mock issued
+  const exchangeCode = deepLink[1];
   assert.equal(redeemExchangeCode(exchangeCode), 'user-999');
   server.close();
 });
