@@ -1,8 +1,5 @@
 import ProfileFieldsEditor from './ProfileFieldsEditor';
-
-function colorsOf(profile) {
-  return { usernameColor: profile.usernameColor, chatColor: profile.chatColor };
-}
+import { colorsOf } from './profileColors';
 
 export default function DefaultSlotsSection({ profiles, onChange }) {
   async function update(mutate) {

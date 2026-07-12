@@ -1,21 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
+import { parseAuthCode, parseAuthError } from './protocolUrl.js';
 
-test('extracts the token from a valid disco:// auth URL', () => {
-  assert.equal(parseAuthToken('disco://auth?token=abc123'), 'abc123');
+test('extracts the exchange code from a valid disco:// auth URL', () => {
+  assert.equal(parseAuthCode('disco://auth?code=abc123'), 'abc123');
 });
 
 test('returns null for a non-disco URL', () => {
-  assert.equal(parseAuthToken('https://example.com?token=abc123'), null);
+  assert.equal(parseAuthCode('https://example.com?code=abc123'), null);
 });
 
-test('returns null when there is no token param', () => {
-  assert.equal(parseAuthToken('disco://auth'), null);
+test('returns null when there is no code param', () => {
+  assert.equal(parseAuthCode('disco://auth'), null);
 });
 
 test('returns null for a malformed URL', () => {
-  assert.equal(parseAuthToken('not a url'), null);
+  assert.equal(parseAuthCode('not a url'), null);
 });
 
 test('parseAuthError extracts the error from a denied-login redirect', () => {
@@ -23,17 +23,5 @@ test('parseAuthError extracts the error from a denied-login redirect', () => {
 });
 
 test('parseAuthError returns null when there is no error param', () => {
-  assert.equal(parseAuthError('disco://auth?token=abc123'), null);
-});
-
-test('parseAuthUserId extracts the userId from a success redirect', () => {
-  assert.equal(parseAuthUserId('disco://auth?token=abc&userId=123456789'), '123456789');
-});
-
-test('parseAuthUserId returns null when there is no userId param', () => {
-  assert.equal(parseAuthUserId('disco://auth?token=abc'), null);
-});
-
-test('parseAuthUserId returns null for a non-disco URL', () => {
-  assert.equal(parseAuthUserId('https://example.com?userId=123'), null);
+  assert.equal(parseAuthError('disco://auth?code=abc123'), null);
 });

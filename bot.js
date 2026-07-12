@@ -16,14 +16,29 @@ import {
 } from '@discordjs/voice';
 import prism from 'prism-media';
 import WebSocket from 'ws';
-import { broadcastToSession, PORT_NUMBER } from './gateway.js';
-import { createSession, endSession, getSession, setRoster, activeSessionCount } from './sessionRegistry.js';
+import { broadcastToSession } from './gateway.js';
+import {
+  createSession,
+  endSession,
+  endSessionIfCurrent,
+  getSession,
+  setRoster,
+  activeSessionCount,
+} from './sessionRegistry.js';
 
 const { DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DEEPGRAM_API_KEY } = process.env;
-const rawMaxActiveSessions = process.env.MAX_ACTIVE_SESSIONS;
-const MAX_ACTIVE_SESSIONS = rawMaxActiveSessions === undefined || rawMaxActiveSessions === ''
-  ? 5
-  : Number(rawMaxActiveSessions);
+
+// A non-numeric MAX_ACTIVE_SESSIONS (e.g. an env-var typo) used to silently disable
+// the session cap entirely: Number('garbage') is NaN, and `count >= NaN` is always
+// false. Falling back to the same default of 5 keeps a bad env value from ever
+// removing the cap outright.
+export function resolveMaxActiveSessions(raw) {
+  if (raw === undefined || raw === '') return 5;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 5;
+}
+
+const MAX_ACTIVE_SESSIONS = resolveMaxActiveSessions(process.env.MAX_ACTIVE_SESSIONS);
 
 const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
 
@@ -265,7 +280,7 @@ function stopTranscribing(guildId) {
 async function handleCaptionsStart(interaction) {
   const channel = interaction.member.voice.channel;
   if (!channel) {
-    await interaction.reply({ content: 'Invoker must be injoice channel.', ephemeral: true });
+    await interaction.reply({ content: 'Invoker must be in a voice channel.', ephemeral: true });
     return;
   }
 
@@ -290,8 +305,11 @@ async function handleCaptionsStart(interaction) {
 
   // Reserve this guild's slot synchronously, before any `await` below, so a second
   // concurrent /disco join (in this guild, or racing the global cap) can't pass the
-  // checks above before this one claims the slot.
-  createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener: null });
+  // checks above before this one claims the slot. Tracked in `session` (reassigned
+  // below once the real voiceStateListener is known) so the catch block's cleanup
+  // can use endSessionIfCurrent - see the comment there for why a plain endSession
+  // would be wrong.
+  let session = createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener: null });
 
   let connection;
   try {
@@ -329,7 +347,7 @@ async function handleCaptionsStart(interaction) {
       broadcastToSession(guildId, { type: 'roster', channelId: session.channelId, members: updatedRoster });
     };
 
-    createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener });
+    session = createSession(guildId, { channelId: channel.id, ownerId: interaction.user.id, voiceStateListener });
     setRoster(guildId, roster);
     broadcastToSession(guildId, { type: 'roster', channelId: channel.id, members: roster });
 
@@ -349,7 +367,13 @@ async function handleCaptionsStart(interaction) {
     });
   } catch (err) {
     connection?.destroy();
-    endSession(guildId);
+    // Not a plain endSession(guildId): entersState() above doesn't reject early
+    // just because `connection` was destroyed (e.g. by a concurrent /disco leave
+    // racing this join before Ready) - it only resolves on Ready or times out.
+    // If a fresh /disco join has since claimed guildId's slot while this one was
+    // still waiting out that timeout, this call must not delete that newer,
+    // unrelated session out from under it.
+    endSessionIfCurrent(guildId, session);
     throw err;
   }
 }

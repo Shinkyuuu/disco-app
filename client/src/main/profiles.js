@@ -1,6 +1,8 @@
-import { app, dialog } from 'electron';
+import electron from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+
+const { app, dialog } = electron;
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
 const MIME_BY_EXT = {
@@ -19,7 +21,15 @@ function userAvatarsRoot() {
   return path.join(app.getPath('userData'), 'avatars');
 }
 
-function scopeDir(root, scope, id) {
+// Every id/index passed here ultimately reaches fs.readFileSync/copyFileSync/rmSync
+// (see removeFriendProfile's recursive rmSync in particular) - restricting it to a
+// bare numeric string (real Discord snowflakes and slotDirName's zero-padded slot
+// numbers both are) closes off '..'/'/' path-traversal from ever reaching a raw
+// renderer-supplied userId/slotIndex via IPC.
+export function scopeDir(root, scope, id) {
+  if (!/^\d{1,32}$/.test(String(id))) {
+    throw new Error(`Invalid profile id: ${id}`);
+  }
   const sub = scope === 'friend' ? 'friends' : 'defaults';
   return path.join(root, sub, id);
 }
@@ -44,7 +54,10 @@ function readAvatarDataUrl(scope, id, kind) {
   return `data:${mime};base64,${b64}`;
 }
 
-function slotDirName(slotIndex) {
+export function slotDirName(slotIndex) {
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 10) {
+    throw new RangeError(`Invalid slot index: ${slotIndex}`);
+  }
   return String(slotIndex + 1).padStart(2, '0');
 }
 

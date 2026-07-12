@@ -3,7 +3,6 @@
 // side effects (index.js has none of those guards, so importing it directly
 // in a test would run them).
 
-export const CHAT_WINDOW_WIDTH = 480;
 export const CHAT_PANEL_HEIGHT = 324;
 export const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 158, medium: 221, large: 281 };
 // Discord-mode avatars are shorter/rounder than custom-image portraits and

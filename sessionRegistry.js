@@ -12,6 +12,17 @@ export function endSession(guildId) {
   return session;
 }
 
+// Compare-and-delete: only removes the guild's session if it's still the exact
+// object passed in. Guards against a slow /disco join's error-recovery path (an
+// entersState() timeout doesn't reject early just because the connection was
+// destroyed by a concurrent /disco leave - see bot.js) tearing down a newer,
+// unrelated session that has since taken this guildId's slot.
+export function endSessionIfCurrent(guildId, expectedSession) {
+  if (sessions.get(guildId) !== expectedSession) return null;
+  sessions.delete(guildId);
+  return expectedSession;
+}
+
 export function getSession(guildId) {
   return sessions.get(guildId);
 }

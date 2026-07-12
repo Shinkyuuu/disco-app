@@ -16,7 +16,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
-    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/main/chatWindowSize.test.js src/main/chatMenuPosition.test.js src/renderer/src/resolveAppearance.test.js src/renderer/src/typewriter.test.js src/renderer/src/chatAppearanceOptions.test.js"
+    "test": "node --test src/main/protocolUrl.test.js src/main/backoff.test.js src/main/wsClient.test.js src/main/serverScheme.test.js src/main/authFailure.test.js src/main/chatWindowSize.test.js src/main/chatMenuPosition.test.js src/main/profiles.test.js src/main/settingsKeys.test.js src/main/authClient.test.js src/main/profileClient.test.js src/renderer/src/resolveAppearance.test.js src/renderer/src/typewriter.test.js src/renderer/src/chatAppearanceOptions.test.js src/renderer/src/mergeEntries.test.js src/renderer/src/settings/profileColors.test.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
