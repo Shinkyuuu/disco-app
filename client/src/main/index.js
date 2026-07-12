@@ -206,6 +206,7 @@ function createChatWindow() {
   }
   const avatarSize = store.get('avatarSize');
   const collapsed = store.get('chatCollapsed');
+  const locked = store.get('chatLocked');
   const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
   chatWindow = new BrowserWindow({
     width: store.get('chatWindowWidth'),
@@ -219,6 +220,8 @@ function createChatWindow() {
     // Transparent so the header strip above the chat panel is invisible -
     // speaker avatars render there and appear to float above the window.
     transparent: true,
+    resizable: !locked,
+    movable: !locked,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -352,6 +355,7 @@ function registerIpcHandlers() {
     chatSize: store.get('chatSize'),
     chatOpacity: store.get('chatOpacity'),
     chatCollapsed: store.get('chatCollapsed'),
+    chatLocked: store.get('chatLocked'),
     chatFontFamily: store.get('chatFontFamily'),
     chatBorderStyle: store.get('chatBorderStyle'),
     hasSessionToken: Boolean(store.get('sessionToken')),
@@ -368,6 +372,12 @@ function registerIpcHandlers() {
     // (or would clip) until the next time the window happens to be recreated.
     if (('avatarSize' in partial || 'chatCollapsed' in partial) && chatWindow) {
       applyChatWindowSize(chatWindow);
+    }
+    // Same live-apply reasoning as above: movable/resizable are BrowserWindow
+    // properties, not CSS, so an open window needs them flipped directly.
+    if ('chatLocked' in partial && chatWindow) {
+      chatWindow.setMovable(!partial.chatLocked);
+      chatWindow.setResizable(!partial.chatLocked);
     }
     // Font/border are picked from the launcher's Settings page - a separate
     // renderer process from the chat window - so push the change through so
