@@ -247,9 +247,9 @@ function createChatWindow() {
   chatWindow.loadURL(rendererUrl('chat'));
   chatWindow.on('closed', () => {
     chatWindow = null;
-    if (launcherWindow) launcherWindow.restore();
+    if (launcherWindow) launcherWindow.show();
   });
-  if (launcherWindow) launcherWindow.minimize();
+  if (launcherWindow) launcherWindow.hide();
 }
 
 function logout() {
