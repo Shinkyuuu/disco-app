@@ -10,6 +10,13 @@
   font-style: normal;
 }
 
+@font-face {
+  font-family: 'Nintendo DS';
+  src: url('./fonts/Nintendo-DS/Nintendo-DS.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -36,6 +43,11 @@ button,
 input,
 select {
   font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(124, 108, 227);
+  outline-offset: 1px;
 }
 
 /* --- custom scrollbar (Chromium/Electron) --- */
@@ -130,6 +142,7 @@ select {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   overflow: visible; /* the avatar-size submenu extends past this box's left edge */
   min-width: 120px;
+  padding: 4px;
 }
 
 /* The popup window is wider than the dropdown itself, reserving room on the
@@ -160,7 +173,7 @@ select {
   width: 100%;
   text-align: left;
   background: transparent;
-  border-radius: 0;
+  border-radius: 4px;
 }
 
 .window-menu-item:hover,
@@ -222,6 +235,7 @@ select {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   overflow: hidden;
   min-width: 96px;
+  padding: 4px;
 }
 
 /* --- launcher window --- */
