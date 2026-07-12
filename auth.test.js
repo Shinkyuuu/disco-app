@@ -29,12 +29,39 @@ test('verifySessionToken returns null for an unknown token', () => {
   assert.equal(verifySessionToken('not-a-real-token'), null);
 });
 
-test('verifySessionToken returns null and purges an expired token', (t) => {
+test('verifySessionToken returns null once the 6-month TTL has passed', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const token = createSessionToken('user-456');
-  t.mock.timers.tick(4 * 60 * 60 * 1000 + 1); // just past the 4h TTL
+  t.mock.timers.tick(6 * 30 * 24 * 60 * 60 * 1000 + 1); // just past the 6-month TTL
   assert.equal(verifySessionToken(token), null);
-  assert.equal(verifySessionToken(token), null); // purged, not just "expired but still there"
+});
+
+test('verifySessionToken returns null for a token with a tampered payload', () => {
+  const token = createSessionToken('user-456');
+  const [payload, signature] = token.split('.');
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  const tamperedPayload = Buffer.from(JSON.stringify({ ...decoded, userId: 'attacker' })).toString('base64url');
+  assert.equal(verifySessionToken(`${tamperedPayload}.${signature}`), null);
+});
+
+test('verifySessionToken returns null for a token with a tampered signature', () => {
+  const token = createSessionToken('user-456');
+  const [payload, signature] = token.split('.');
+  const tamperedSignature = signature.slice(0, -1) + (signature.at(-1) === 'a' ? 'b' : 'a');
+  assert.equal(verifySessionToken(`${payload}.${tamperedSignature}`), null);
+});
+
+test('verifySessionToken returns null for a malformed token', () => {
+  assert.equal(verifySessionToken('no-dot-in-here'), null);
+  assert.equal(verifySessionToken(''), null);
+});
+
+test('a session token survives a fresh in-memory state - no server-side store to lose on restart', () => {
+  // Regression guard for the original bug: sessions must not depend on any process-lifetime
+  // state. Verifying immediately after creation, with nothing else touched in between, is the
+  // whole point - there is no Map/cache to simulate "restarting" because there must not be one.
+  const token = createSessionToken('user-789');
+  assert.equal(verifySessionToken(token), 'user-789');
 });
 
 test('createExchangeCode then redeemExchangeCode returns the same userId', () => {
@@ -65,7 +92,8 @@ test('buildAuthorizeUrl includes the required OAuth params, including the CSRF s
   assert.equal(url.searchParams.get('response_type'), 'code');
   assert.equal(url.searchParams.get('scope'), 'identify');
   assert.equal(url.searchParams.get('client_id'), process.env.DISCORD_APPLICATION_ID);
-  assert.equal(url.searchParams.get('redirect_uri'), `http://localhost:${process.env.PORT || 3000}/auth/callback`);
+  const expectedBase = process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+  assert.equal(url.searchParams.get('redirect_uri'), `${expectedBase}/auth/callback`);
   assert.equal(url.searchParams.get('state'), 'some-state');
 });
 

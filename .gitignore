@@ -1,4 +1,5 @@
 .env
+.env.example
 RELEASE.md
 node_modules
 recordings/

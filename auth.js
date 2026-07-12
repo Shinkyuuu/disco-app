@@ -1,27 +1,51 @@
 import crypto from 'node:crypto';
 
-const SESSION_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const SESSION_TOKEN_TTL_MS = 6 * 30 * 24 * 60 * 60 * 1000; // 6 months
 const EXCHANGE_CODE_TTL_MS = 60 * 1000; // 60s - just long enough for the OS to launch the disco:// link and the app to redeem it
 const STATE_COOKIE_NAME = 'disco_oauth_state';
 const STATE_COOKIE_MAX_AGE_S = 300; // 5 minutes - generous for a slow OAuth consent screen
 
-// token -> { userId, expiresAt }
-const sessionTokens = new Map();
+// Sessions are self-verifying (payload + HMAC signature), not looked up in any server-side
+// store - a restart must never log users out, and there's nothing here to lose on restart.
+// Trades away the ability to revoke one specific session early (it just expires at the TTL
+// instead), which logout() doesn't do today anyway, so this isn't a regression.
+const { SESSION_SECRET } = process.env;
+if (!SESSION_SECRET) {
+  throw new Error('SESSION_SECRET env var is required to sign session tokens');
+}
+
+function signPayload(payloadB64) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(payloadB64).digest('base64url');
+}
 
 export function createSessionToken(userId) {
-  const token = crypto.randomBytes(32).toString('hex');
-  sessionTokens.set(token, { userId, expiresAt: Date.now() + SESSION_TOKEN_TTL_MS });
-  return token;
+  const expiresAt = Date.now() + SESSION_TOKEN_TTL_MS;
+  const payloadB64 = Buffer.from(JSON.stringify({ userId, expiresAt })).toString('base64url');
+  return `${payloadB64}.${signPayload(payloadB64)}`;
 }
 
 export function verifySessionToken(token) {
-  const entry = sessionTokens.get(token);
-  if (!entry) return null;
-  if (Date.now() >= entry.expiresAt) {
-    sessionTokens.delete(token);
+  if (typeof token !== 'string') return null;
+  const dot = token.lastIndexOf('.');
+  if (dot === -1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+
+  const expectedSignature = signPayload(payloadB64);
+  const actual = Buffer.from(signature);
+  const expected = Buffer.from(expectedSignature);
+  // Different-length buffers would make timingSafeEqual throw rather than return false.
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+  } catch {
     return null;
   }
-  return entry.userId;
+  if (!payload || typeof payload.userId !== 'string' || typeof payload.expiresAt !== 'number') return null;
+  if (Date.now() >= payload.expiresAt) return null;
+  return payload.userId;
 }
 
 // code -> { userId, expiresAt }. A single-use, short-lived hand-off between the
