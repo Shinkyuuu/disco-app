@@ -2,7 +2,6 @@ import Store from 'electron-store';
 
 export const store = new Store({
   defaults: {
-    serverAddress: 'disco.schemainit.com',
     avatarMode: 'discord',
     avatarSize: 'small',
     chatSize: 'medium',

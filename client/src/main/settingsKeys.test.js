@@ -26,8 +26,6 @@ test('returns an empty object when nothing is allowlisted', () => {
   assert.deepEqual(sanitizeSettingsPatch({ notAKey: true }), {});
 });
 
-test('serverAddress itself is allowlisted (renderer is allowed to change it)', () => {
-  assert.deepEqual(sanitizeSettingsPatch({ serverAddress: 'my.server.com' }), {
-    serverAddress: 'my.server.com',
-  });
+test('serverAddress is not allowlisted (it is set via the SERVER_ADDRESS env var, not the renderer)', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ serverAddress: 'my.server.com' }), {});
 });

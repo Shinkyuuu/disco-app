@@ -20,7 +20,7 @@ export default function FriendOverridesSection({ friends, onChange }) {
 
   return (
     <>
-      <h3 className="settings-heading">Friend Overrides</h3>
+      <h3 className="settings-heading settings-heading--profile">Friend Overrides</h3>
       <section className="settings-section">
         <div className="friend-cards">
           {Object.entries(friends).map(([userId, profile]) => (

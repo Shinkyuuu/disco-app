@@ -21,7 +21,7 @@ export default function ChatAppearanceSection({ settings, onSettingsChange }) {
       <h3 className="settings-heading">Chatbox Appearance</h3>
       <section className="settings-section">
         <div className="chat-appearance-fields">
-          <label className="settings-field">
+          <div className="settings-field">
             Font
             <OptionPickerGrid
               options={FONT_OPTIONS}
@@ -29,8 +29,8 @@ export default function ChatAppearanceSection({ settings, onSettingsChange }) {
               onSelect={(id) => onSettingsChange({ chatFontFamily: id }, true)}
               renderPreview={(option) => <span style={{ fontFamily: option.cssFontFamily }}>{option.label}</span>}
             />
-          </label>
-          <label className="settings-field">
+          </div>
+          <div className="settings-field">
             Border style
             <OptionPickerGrid
               options={BORDER_OPTIONS}
@@ -39,7 +39,7 @@ export default function ChatAppearanceSection({ settings, onSettingsChange }) {
               renderPreview={() => null}
               tileStyle={borderTileStyle}
             />
-          </label>
+          </div>
         </div>
       </section>
     </>
