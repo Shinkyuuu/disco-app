@@ -3,6 +3,7 @@ import YourProfileSection from './YourProfileSection';
 import DefaultSlotsSection from './DefaultSlotsSection';
 import FriendOverridesSection from './FriendOverridesSection';
 import ChatAppearanceSection from './ChatAppearanceSection';
+import { resolveFontOption, DEFAULT_FONT_ID } from '../chatAppearanceOptions';
 
 export default function SettingsView({ settings, onSettingsChange, onBack }) {
   const [defaultProfiles, setDefaultProfiles] = useState([]);
@@ -22,6 +23,7 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
   const otherFriends = Object.fromEntries(
     Object.entries(friendProfiles).filter(([id]) => id !== loggedInUserId),
   );
+  const fontOption = resolveFontOption(settings.chatFontFamily ?? DEFAULT_FONT_ID);
 
   return (
     <div className="settings-view">
@@ -33,7 +35,7 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
           <h2 className="settings-title">Settings</h2>
         </div>
       </div>
-      <div className="settings-scroll">
+      <div className="settings-scroll" style={{ '--chat-font-family': fontOption.cssFontFamily }}>
         <h3 className="settings-heading">General</h3>
         <section className="settings-section">
           <label className="settings-field">
@@ -48,20 +50,8 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
         <ChatAppearanceSection settings={settings} onSettingsChange={onSettingsChange} />
 
         <YourProfileSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
-        <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
         <FriendOverridesSection friends={otherFriends} onChange={reload} />
-
-        <h3 className="settings-heading">Developer</h3>
-        <section className="settings-section">
-          <label className="settings-field">
-            Server address
-            <input
-              value={settings.serverAddress}
-              onChange={(e) => onSettingsChange({ serverAddress: e.target.value }, false)}
-              onBlur={(e) => window.api.setSettings({ serverAddress: e.target.value })}
-            />
-          </label>
-        </section>
+        <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
       </div>
     </div>
   );

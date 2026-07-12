@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
@@ -56,6 +57,8 @@ const NO_MAX_WIDTH = 2147483647;
 // "0 = unbounded" sentinel, so height needs its own explicit large value too
 // when width is locked but height should stay freely resizable.
 const NO_MAX_HEIGHT = 2147483647;
+// Set via a SERVER_ADDRESS entry in client/.env - not user-editable in Settings.
+const SERVER_ADDRESS = process.env.SERVER_ADDRESS || 'disco.schemainit.com';
 
 let updaterWindow = null;
 let launcherWindow = null;
@@ -97,7 +100,6 @@ function setConnectionState(state) {
 function startWsClient() {
   if (wsClient) return;
   const token = store.get('sessionToken');
-  const serverAddress = store.get('serverAddress');
   if (!token) {
     // A stale token gets deleted on auth-failure; surface that as the
     // session-expired screen instead of silently opening a dead window.
@@ -105,7 +107,7 @@ function startWsClient() {
     return;
   }
 
-  wsClient = createWsClient({ serverAddress, token });
+  wsClient = createWsClient({ serverAddress: SERVER_ADDRESS, token });
 
   wsClient.on('roster', (members) => {
     currentRoster = members;
@@ -143,7 +145,7 @@ function startWsClient() {
   wsClient.on('close', (code, reason) => {
     consecutiveFailures += 1;
     const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
-    setConnectionState({ status, code, reason, serverAddress: store.get('serverAddress') });
+    setConnectionState({ status, code, reason, serverAddress: SERVER_ADDRESS });
   });
 }
 
@@ -158,7 +160,7 @@ async function pollProfileOnce() {
   const token = store.get('sessionToken');
   if (!token) return { reachable: true, profile: null };
   try {
-    const profile = await fetchProfile({ serverAddress: store.get('serverAddress'), token });
+    const profile = await fetchProfile({ serverAddress: SERVER_ADDRESS, token });
     return { reachable: true, profile };
   } catch (err) {
     if (err instanceof AuthError) {
@@ -419,7 +421,7 @@ async function handleDeepLink(url) {
   const code = parseAuthCode(url);
   if (code) {
     try {
-      const { token, userId } = await exchangeAuthCode({ serverAddress: store.get('serverAddress'), code });
+      const { token, userId } = await exchangeAuthCode({ serverAddress: SERVER_ADDRESS, code });
       deliverAuthToken(token, userId);
     } catch (err) {
       console.error('Auth code exchange failed:', err);
@@ -471,7 +473,7 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('get-settings', () => ({
-    serverAddress: store.get('serverAddress'),
+    serverAddress: SERVER_ADDRESS,
     avatarMode: store.get('avatarMode'),
     avatarSize: store.get('avatarSize'),
     chatSize: store.get('chatSize'),

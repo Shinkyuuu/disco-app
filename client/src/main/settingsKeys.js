@@ -6,7 +6,6 @@
 // compromised renderer could otherwise set-settings its way into overwriting
 // any of those directly.
 export const SETTABLE_KEYS = new Set([
-  'serverAddress',
   'avatarMode',
   'avatarSize',
   'chatSize',
