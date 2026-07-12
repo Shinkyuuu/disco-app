@@ -56,6 +56,8 @@ export default function WindowMenu({
   onCollapsedToggle,
   opacity,
   onOpacityChange,
+  locked,
+  onLockToggle,
 }) {
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState(null);
@@ -150,6 +152,17 @@ export default function WindowMenu({
               }}
             >
               {collapsed ? 'Show chat box' : 'Hide chat box'}
+            </button>
+          )}
+          {onLockToggle && (
+            <button
+              className="window-menu-item"
+              onClick={() => {
+                onLockToggle(!locked);
+                setOpen(false);
+              }}
+            >
+              {locked ? 'Unlock window' : 'Lock window'}
             </button>
           )}
           <button className="window-menu-item" onClick={() => window.close()}>

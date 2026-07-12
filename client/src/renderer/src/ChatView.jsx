@@ -30,6 +30,8 @@ function ChatFrame({
   onPinToggle,
   collapsed = false,
   onCollapsedToggle,
+  locked,
+  onLockToggle,
   panelStyle,
   opacity,
   onOpacityChange,
@@ -50,6 +52,8 @@ function ChatFrame({
           onCollapsedToggle={onCollapsedToggle}
           opacity={opacity}
           onOpacityChange={onOpacityChange}
+          locked={locked}
+          onLockToggle={onLockToggle}
         />
         {!collapsed && children}
       </div>
@@ -113,6 +117,11 @@ export default function ChatView() {
   function handleCollapsedToggle(chatCollapsed) {
     setSettings((prev) => (prev ? { ...prev, chatCollapsed } : prev));
     window.api.setSettings({ chatCollapsed });
+  }
+
+  function handleLockToggle(chatLocked) {
+    setSettings((prev) => (prev ? { ...prev, chatLocked } : prev));
+    window.api.setSettings({ chatLocked });
   }
 
   useEffect(() => {
@@ -204,6 +213,7 @@ export default function ChatView() {
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
   const chatCollapsed = settings?.chatCollapsed ?? false;
+  const chatLocked = settings?.chatLocked ?? false;
   const fontOption = resolveFontOption(settings?.chatFontFamily ?? DEFAULT_FONT_ID);
   const borderOption = resolveBorderOption(settings?.chatBorderStyle ?? DEFAULT_BORDER_ID);
   const colorBySpeaker = Object.fromEntries(
@@ -220,6 +230,8 @@ export default function ChatView() {
       onPinToggle={handlePinToggle}
       collapsed={chatCollapsed}
       onCollapsedToggle={handleCollapsedToggle}
+      locked={chatLocked}
+      onLockToggle={handleLockToggle}
       panelStyle={{
         backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,
         '--chat-font-family': fontOption.cssFontFamily,
