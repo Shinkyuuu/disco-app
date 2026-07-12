@@ -1,8 +1,5 @@
 import ProfileFieldsEditor from './ProfileFieldsEditor';
-
-function colorsOf(profile) {
-  return { usernameColor: profile.usernameColor, chatColor: profile.chatColor };
-}
+import { colorsOf } from './profileColors';
 
 // Mechanically a friend profile keyed by loggedInUserId, given pinned styling.
 export default function YourProfileSection({ loggedInUserId, profile, onChange }) {

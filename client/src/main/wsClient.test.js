@@ -39,11 +39,12 @@ test('emits close with the server-provided code and reason', async () => {
   wss.close();
 });
 
-test('emits auth-failed (not close-and-reconnect) for auth-specific close codes', async () => {
+test('emits auth-failed (not close-and-reconnect) with both the reason and numeric close code', async () => {
   const { wss, port } = await startFakeGateway((ws) => ws.close(4001, 'not in voice channel'));
   const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok' });
-  const reason = await new Promise((resolve) => client.on('auth-failed', resolve));
+  const [reason, code] = await new Promise((resolve) => client.on('auth-failed', (r, c) => resolve([r, c])));
   assert.equal(reason, 'not in voice channel');
+  assert.equal(code, 4001);
   wss.close();
 });
 
@@ -63,6 +64,22 @@ test('reconnects automatically after a non-auth close', async () => {
   await new Promise((resolve) => client.on('roster', resolve)); // only fires after the 2nd connection succeeds
   assert.ok(connectionCount >= 2);
   client.close();
+  wss.close();
+});
+
+test('close() cancels a pending reconnect timer so no zombie reconnection happens', async () => {
+  let connectionCount = 0;
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type === 'auth') {
+      connectionCount += 1;
+      ws.terminate(); // always drop - only the first connection should ever happen
+    }
+  });
+  const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok', reconnectBaseDelayMs: 20 });
+  await new Promise((resolve) => client.on('close', resolve)); // first disconnect - reconnect timer now pending
+  client.close();
+  await new Promise((resolve) => setTimeout(resolve, 100)); // well past the pending reconnect delay
+  assert.equal(connectionCount, 1);
   wss.close();
 });
 

@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
-import { handleAuthLogin, handleAuthCallback, verifySessionToken } from './auth.js';
+import { handleAuthLogin, handleAuthCallback, handleAuthExchange, verifySessionToken } from './auth.js';
 import { getLiveSessionForUser, getUserProfile } from './bot.js';
 import { getSession } from './sessionRegistry.js';
 
@@ -12,6 +12,7 @@ export const httpServer = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname === '/auth/login') return handleAuthLogin(req, res);
   if (url.pathname === '/auth/callback') return handleAuthCallback(req, res);
+  if (url.pathname === '/auth/exchange') return handleAuthExchange(req, res);
   if (url.pathname === '/api/me') return handleMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found - use the Disco Electron client to view captions.');

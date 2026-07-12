@@ -10,6 +10,7 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
   let attempt = 0;
   let closedByCaller = false;
   let socket = null;
+  let reconnectTimer = null;
 
   function connect() {
     const scheme = schemeFor(serverAddress, { secure: 'wss', insecure: 'ws' });
@@ -47,14 +48,18 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
       emitter.emit('close', code, reason);
       if (closedByCaller) return;
       if (AUTH_CLOSE_CODES.has(code)) {
-        emitter.emit('auth-failed', reason);
+        // The numeric code, not just the human-readable reason text, so callers
+        // can branch on a stable value instead of matching the server's exact
+        // close-reason string (fragile - the same class of bug as a typo in that
+        // string silently breaking whatever matched it).
+        emitter.emit('auth-failed', reason, code);
         return;
       }
       const delay = reconnectBaseDelayMs !== undefined
         ? Math.min(reconnectBaseDelayMs * 2 ** attempt, 30000)
         : nextDelay(attempt);
       attempt += 1;
-      setTimeout(connect, delay);
+      reconnectTimer = setTimeout(connect, delay);
     });
   }
 
@@ -62,6 +67,10 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
 
   emitter.close = () => {
     closedByCaller = true;
+    // Without this, a reconnect already scheduled (but not yet fired) when the
+    // caller closes keeps running on its own after close() returns - opening a
+    // fresh socket with a token/state the caller has since considered gone.
+    clearTimeout(reconnectTimer);
     socket.close();
   };
   return emitter;

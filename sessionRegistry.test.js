@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, endSession, getSession, setRoster, activeSessionCount } from './sessionRegistry.js';
+import {
+  createSession,
+  endSession,
+  endSessionIfCurrent,
+  getSession,
+  setRoster,
+  activeSessionCount,
+} from './sessionRegistry.js';
 
 test('createSession stores a session retrievable by guildId', () => {
   createSession('guild-a', { channelId: 'chan-1', ownerId: 'user-1', voiceStateListener: null });
@@ -36,6 +43,27 @@ test('setRoster updates the roster for an existing session', () => {
 test('setRoster is a no-op for a guild with no session', () => {
   setRoster('guild-does-not-exist', [{ speakerId: 'x' }]);
   assert.equal(getSession('guild-does-not-exist'), undefined);
+});
+
+test('endSessionIfCurrent removes the session when it is still the one passed in', () => {
+  const session = createSession('guild-f', { channelId: 'chan-6', ownerId: 'user-6', voiceStateListener: null });
+  const removed = endSessionIfCurrent('guild-f', session);
+  assert.equal(removed, session);
+  assert.equal(getSession('guild-f'), undefined);
+});
+
+test('endSessionIfCurrent is a no-op when a newer session has since replaced it', () => {
+  const staleSession = createSession('guild-g', { channelId: 'chan-7', ownerId: 'user-7', voiceStateListener: null });
+  const newSession = createSession('guild-g', { channelId: 'chan-7', ownerId: 'user-7', voiceStateListener: null });
+  const removed = endSessionIfCurrent('guild-g', staleSession);
+  assert.equal(removed, null);
+  assert.equal(getSession('guild-g'), newSession);
+  endSession('guild-g');
+});
+
+test('endSessionIfCurrent is a no-op when the guild has no session at all', () => {
+  const session = { channelId: 'chan-8', ownerId: 'user-8', roster: [], voiceStateListener: null };
+  assert.equal(endSessionIfCurrent('guild-never-existed-either', session), null);
 });
 
 test('activeSessionCount reflects the number of currently active sessions', () => {

@@ -1,9 +1,6 @@
 import { useState } from 'react';
 import ProfileFieldsEditor from './ProfileFieldsEditor';
-
-function colorsOf(profile) {
-  return { usernameColor: profile.usernameColor, chatColor: profile.chatColor };
-}
+import { colorsOf } from './profileColors';
 
 export default function FriendOverridesSection({ friends, onChange }) {
   const [newId, setNewId] = useState('');

@@ -3,7 +3,8 @@ import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
+import { parseAuthCode, parseAuthError } from './protocolUrl.js';
+import { exchangeAuthCode } from './authClient.js';
 import { store } from './store.js';
 import {
   chatWindowHeightFor,
@@ -14,6 +15,7 @@ import {
 } from './chatWindowSize.js';
 import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
 import { createWsClient } from './wsClient.js';
+import { sanitizeSettingsPatch } from './settingsKeys.js';
 import { schemeFor } from './serverScheme.js';
 import { fetchProfile, AuthError } from './profileClient.js';
 import { isRetryableAuthFailure } from './authFailure.js';
@@ -29,6 +31,7 @@ import {
   addFriendProfile,
   setFriendProfileColors,
   removeFriendProfile,
+  slotDirName,
 } from './profiles.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,12 +40,6 @@ const PROTOCOL = 'disco';
 // this is only needed so `npm run dev` also shows the real icon (taskbar +
 // window), not the default Electron logo.
 const ICON_PATH = path.join(app.getAppPath(), 'resources', 'icon.png');
-
-// The header strip's height must grow with avatar size or larger icons get
-// clipped by the window's own bounds (Electron windows clip all content to
-// their rect, regardless of CSS overflow). Panel height stays constant across
-// sizes so the message log doesn't shrink - only the window grows upward.
-const CHAT_WINDOW_WIDTH = 480;
 
 // Chromium's setMaximumSize(0, 0) means "no maximum" - but that sentinel
 // only applies when BOTH dimensions are 0 (extensions::SizeConstraints::
@@ -137,11 +134,11 @@ function startWsClient() {
     consecutiveFailures = 0;
     setConnectionState({ status: 'connected' });
   });
-  wsClient.on('auth-failed', (reason) => {
-    setConnectionState({ status: 'auth-failed', reason });
+  wsClient.on('auth-failed', (reason, code) => {
+    setConnectionState({ status: 'auth-failed', reason, code });
     wsClient.close();
     wsClient = null;
-    if (!isRetryableAuthFailure(reason)) store.delete('sessionToken');
+    if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
   });
   wsClient.on('close', (code, reason) => {
     consecutiveFailures += 1;
@@ -174,9 +171,20 @@ async function pollProfileOnce() {
 
 function startProfilePolling() {
   if (profilePollTimer) return;
+  // Guards against a slow/hung response (fetchProfile's own timeout is a
+  // ceiling, not a guarantee it's always faster than the poll interval) piling
+  // up overlapping requests every 5s, whose replies could then also resolve
+  // out of order and let a stale one overwrite a newer reachability result.
+  let pollInFlight = false;
   const tick = async () => {
-    const result = await pollProfileOnce();
-    if (result && launcherWindow) launcherWindow.webContents.send('profile', result);
+    if (pollInFlight) return;
+    pollInFlight = true;
+    try {
+      const result = await pollProfileOnce();
+      if (result && launcherWindow) launcherWindow.webContents.send('profile', result);
+    } finally {
+      pollInFlight = false;
+    }
   };
   tick(); // immediate poll so a fresh login / cold start doesn't wait a full interval
   profilePollTimer = setInterval(tick, PROFILE_POLL_INTERVAL_MS);
@@ -407,10 +415,16 @@ function deliverAuthError(reason) {
   }
 }
 
-function handleDeepLink(url) {
-  const token = parseAuthToken(url);
-  if (token) {
-    deliverAuthToken(token, parseAuthUserId(url));
+async function handleDeepLink(url) {
+  const code = parseAuthCode(url);
+  if (code) {
+    try {
+      const { token, userId } = await exchangeAuthCode({ serverAddress: store.get('serverAddress'), code });
+      deliverAuthToken(token, userId);
+    } catch (err) {
+      console.error('Auth code exchange failed:', err);
+      deliverAuthError('exchange_failed');
+    }
     return;
   }
   const error = parseAuthError(url);
@@ -473,20 +487,24 @@ function registerIpcHandlers() {
   }));
 
   ipcMain.handle('set-settings', (_event, partial) => {
-    for (const [key, value] of Object.entries(partial)) {
+    // Renderer processes are only ever trusted to change the settings
+    // get-settings itself exposes - not sessionToken, defaultProfiles, or
+    // other store keys those windows have no legitimate reason to touch.
+    const sanitized = sanitizeSettingsPatch(partial);
+    for (const [key, value] of Object.entries(sanitized)) {
       store.set(key, value);
     }
     // Resize the already-open chat window immediately - otherwise a larger
     // avatar size, or a collapse/expand toggle, wouldn't take visual effect
     // (or would clip) until the next time the window happens to be recreated.
-    if (('avatarSize' in partial || 'avatarMode' in partial || 'chatCollapsed' in partial || 'chatAutoWidth' in partial) && chatWindow) {
+    if (('avatarSize' in sanitized || 'avatarMode' in sanitized || 'chatCollapsed' in sanitized || 'chatAutoWidth' in sanitized) && chatWindow) {
       applyChatWindowSize(chatWindow);
     }
     // Same live-apply reasoning as above: movable/resizable are BrowserWindow
     // properties, not CSS, so an open window needs them flipped directly.
-    if ('chatLocked' in partial && chatWindow) {
-      chatWindow.setMovable(!partial.chatLocked);
-      chatWindow.setResizable(!partial.chatLocked);
+    if ('chatLocked' in sanitized && chatWindow) {
+      chatWindow.setMovable(!sanitized.chatLocked);
+      chatWindow.setResizable(!sanitized.chatLocked);
     }
     // getSettings is only read once, on mount, by every renderer - push every
     // change through so an already-open chat window (and its ⋯ menu popup,
@@ -495,8 +513,8 @@ function registerIpcHandlers() {
     // renderer process from the chat window) and for the ⋯ menu popup, which
     // is also a separate renderer process from the chat window it changes
     // avatarSize/chatSize/chatOpacity/chatCollapsed/chatLocked for.
-    if (chatWindow) chatWindow.webContents.send('settings-changed', partial);
-    if (chatMenuWindow) chatMenuWindow.webContents.send('settings-changed', partial);
+    if (chatWindow) chatWindow.webContents.send('settings-changed', sanitized);
+    if (chatMenuWindow) chatMenuWindow.webContents.send('settings-changed', sanitized);
   });
 
   ipcMain.handle('start-chat-window', () => {
@@ -550,7 +568,7 @@ function registerIpcHandlers() {
   ipcMain.handle('get-default-profiles', () => getDefaultProfiles(store));
   ipcMain.handle('get-friend-profiles', () => getFriendProfiles(store));
   ipcMain.handle('pick-default-avatar-image', (_event, { slotIndex, kind }) =>
-    pickAvatarImage({ scope: 'default', id: String(slotIndex + 1).padStart(2, '0'), kind }),
+    pickAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind }),
   );
   ipcMain.handle('pick-friend-avatar-image', async (_event, { userId, kind }) => {
     const dataUrl = await pickAvatarImage({ scope: 'friend', id: userId, kind });
@@ -561,7 +579,7 @@ function registerIpcHandlers() {
     return dataUrl;
   });
   ipcMain.handle('clear-default-avatar-image', (_event, { slotIndex, kind }) =>
-    clearAvatarImage({ scope: 'default', id: String(slotIndex + 1).padStart(2, '0'), kind }),
+    clearAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind }),
   );
   ipcMain.handle('clear-friend-avatar-image', (_event, { userId, kind }) =>
     clearAvatarImage({ scope: 'friend', id: userId, kind }),
@@ -705,5 +723,3 @@ function setupAutoUpdater() {
     setTimeout(transitionToLauncher, MIN_UPDATER_MS);
   }
 }
-
-export { deliverAuthToken, createLauncherWindow };

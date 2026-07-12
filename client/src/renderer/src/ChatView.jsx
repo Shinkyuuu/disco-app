@@ -3,19 +3,7 @@ import SpeakerStrip from './SpeakerStrip';
 import MessageLog, { MESSAGE_VISIBLE_MS, MESSAGE_FADE_MS } from './MessageLog';
 import WindowMenu from './WindowMenu';
 import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
-
-// The one-time state-snapshot pull and the live transcript push are two
-// independent async writers of `entries` with no ordering guarantee between
-// them - merging (keyed by speakerId+receivedAt, deduped, time-sorted) makes
-// the result immune to which one resolves last. An unconditional overwrite
-// here previously let a late-resolving snapshot erase an already-appended
-// live message, which looked like the message vanishing immediately.
-function mergeEntries(current, incoming) {
-  const merged = new Map();
-  for (const entry of current) merged.set(`${entry.speakerId}-${entry.receivedAt}`, entry);
-  for (const entry of incoming) merged.set(`${entry.speakerId}-${entry.receivedAt}`, entry);
-  return [...merged.values()].sort((a, b) => a.receivedAt - b.receivedAt);
-}
+import { mergeEntries } from './mergeEntries';
 
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
@@ -113,7 +101,7 @@ export default function ChatView() {
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
 
-  if (connectionState.status === 'auth-failed' && connectionState.reason === 'not in voice channel') {
+  if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
         <p>You need to be in the voice channel being captioned.</p>
