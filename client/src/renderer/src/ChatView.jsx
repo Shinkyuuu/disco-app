@@ -22,10 +22,10 @@ function mergeEntries(current, incoming) {
 // menuSections mirrors which items the ⋯ menu's popup should include (see
 // WindowMenu/ChatMenuView) - only the normal, non-error render below passes
 // any; the error-state renders further down pass none, leaving just Exit.
-function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', collapsed = false, panelStyle, menuSections, children }) {
+function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
-      <div className={`chat-header chat-header--${avatarSize}`}>{header}</div>
+      <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>{header}</div>
       <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
         <WindowMenu sections={menuSections} />
         {!collapsed && children}
@@ -110,9 +110,12 @@ export default function ChatView() {
     return () => clearInterval(interval);
   }, []);
 
+  const avatarSize = settings?.avatarSize ?? 'small';
+  const avatarMode = settings?.avatarMode ?? 'discord';
+
   if (connectionState.status === 'auth-failed' && connectionState.reason === 'not in voice channel') {
     return (
-      <ChatFrame panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
         <p>You need to be in the voice channel being captioned.</p>
         <button onClick={() => window.api.startChatWindow()}>Retry</button>
       </ChatFrame>
@@ -120,7 +123,7 @@ export default function ChatView() {
   }
   if (connectionState.status === 'auth-failed') {
     return (
-      <ChatFrame panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
         <p>Your session expired - please log in again.</p>
         <button disabled={!settings} onClick={() => settings && window.api.openLogin(settings.serverAddress)}>
           Log in
@@ -130,7 +133,7 @@ export default function ChatView() {
   }
   if (connectionState.status === 'unreachable') {
     return (
-      <ChatFrame panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
         <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
         <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
       </ChatFrame>
@@ -138,14 +141,12 @@ export default function ChatView() {
   }
   if (connectionState.status === 'reconnecting') {
     return (
-      <ChatFrame panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
         <p>Reconnecting…</p>
       </ChatFrame>
     );
   }
 
-  const avatarSize = settings?.avatarSize ?? 'small';
-  const avatarMode = settings?.avatarMode ?? 'discord';
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
   const chatCollapsed = settings?.chatCollapsed ?? false;
@@ -158,8 +159,9 @@ export default function ChatView() {
   return (
     <ChatFrame
       avatarSize={avatarSize}
+      avatarMode={avatarMode}
       collapsed={chatCollapsed}
-      menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true }}
+      menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true, autoWidth: true }}
       panelStyle={{
         backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,
         '--chat-font-family': fontOption.cssFontFamily,

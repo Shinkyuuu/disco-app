@@ -574,6 +574,21 @@ select {
   height: 281px;
 }
 
+/* Discord-mode avatars are shorter and don't bleed below the header like
+   custom-image portraits do, so they need much less top headroom - keep in
+   sync with HEADER_HEIGHT_BY_AVATAR_SIZE_DISCORD in chatWindowSize.js. */
+.chat-header--discord.chat-header--small {
+  height: 124px;
+}
+
+.chat-header--discord.chat-header--medium {
+  height: 160px;
+}
+
+.chat-header--discord.chat-header--large {
+  height: 196px;
+}
+
 .chat-panel {
   position: relative;
   flex: 1;

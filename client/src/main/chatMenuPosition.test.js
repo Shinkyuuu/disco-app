@@ -14,6 +14,12 @@ test('chatMenuHeightFor accounts for the opacity slider taking more room than a 
   assert.ok(withOpacity > withPin);
 });
 
+test('chatMenuHeightFor grows when the autoWidth section is enabled', () => {
+  const exitOnly = chatMenuHeightFor({});
+  const withAutoWidth = chatMenuHeightFor({ autoWidth: true });
+  assert.ok(withAutoWidth > exitOnly);
+});
+
 test('chatMenuPositionFor opens downward and right-aligns to the anchor when there is room', () => {
   const anchor = { x: 700, y: 500, width: 24, height: 24 };
   const size = { width: MENU_POPUP_WIDTH, height: 300 };

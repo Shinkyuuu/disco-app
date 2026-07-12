@@ -90,9 +90,10 @@
 }
 
 /* Sizes are picked to leave headroom, within .chat-header's fixed height
-   (main/index.js + app.css .chat-header--*), for the username label above
-   and the speaking-glow's bleed (scale/translateY/blur) - so neither ever
-   clips against the top of the window. */
+   (main/index.js + app.css .chat-header--*, mode-qualified via
+   .chat-header--discord), for the username label above and the
+   speaking-glow's bleed (scale/translateY/blur) - so neither ever clips
+   against the top of the window. */
 .speaker-icon--discord {
   width: 81px;
   height: 81px;

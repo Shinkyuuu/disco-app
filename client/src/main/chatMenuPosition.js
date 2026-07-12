@@ -26,6 +26,7 @@ export function chatMenuHeightFor(sections) {
   if (sections.pin) height += MENU_ROW_HEIGHT;
   if (sections.collapse) height += MENU_ROW_HEIGHT;
   if (sections.lock) height += MENU_ROW_HEIGHT;
+  if (sections.autoWidth) height += MENU_ROW_HEIGHT;
   return height;
 }
 

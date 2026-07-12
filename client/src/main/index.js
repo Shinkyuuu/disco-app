@@ -5,7 +5,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseAuthToken, parseAuthError, parseAuthUserId } from './protocolUrl.js';
 import { store } from './store.js';
-import { chatWindowHeightFor, HEADER_HEIGHT_BY_AVATAR_SIZE, MIN_CHAT_PANEL_HEIGHT } from './chatWindowSize.js';
+import {
+  chatWindowHeightFor,
+  chatWindowWidthFor,
+  headerHeightFor,
+  HEADER_HEIGHT_BY_AVATAR_SIZE,
+  MIN_CHAT_PANEL_HEIGHT,
+} from './chatWindowSize.js';
 import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
 import { createWsClient } from './wsClient.js';
 import { schemeFor } from './serverScheme.js';
@@ -48,6 +54,11 @@ const CHAT_WINDOW_WIDTH = 480;
 // both-or-neither behavior - same value Electron's own constructor-option
 // path (native_window.cc InitFromOptions) substitutes for an unset max.
 const NO_MAX_WIDTH = 2147483647;
+// Same reasoning as NO_MAX_WIDTH above, mirrored for the auto-width setting:
+// locking max width (a real, deliberate constraint) breaks the maxHeight
+// "0 = unbounded" sentinel, so height needs its own explicit large value too
+// when width is locked but height should stay freely resizable.
+const NO_MAX_HEIGHT = 2147483647;
 
 let updaterWindow = null;
 let launcherWindow = null;
@@ -102,6 +113,10 @@ function startWsClient() {
   wsClient.on('roster', (members) => {
     currentRoster = members;
     broadcastToRenderers('roster', members);
+    // Auto-width fits the window to exactly the current roster's avatars -
+    // a join/leave changes that fit, so re-apply immediately rather than
+    // waiting for the next settings change or window reopen.
+    if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
   });
   wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
   wsClient.on('transcript', (event) => {
@@ -175,26 +190,42 @@ function stopProfilePolling() {
 }
 
 // Resizes an already-open chat window to match the current avatarSize/
-// chatCollapsed settings. While collapsed, min/max height are both locked to
-// the thin-bar height so the window can't be drag-resized taller than the
-// CSS thin bar; while expanded, the normal min height is restored and the
-// max height is uncapped. Width comes from the window's own current size,
-// not the persisted chatWindowWidth - this can run right after the user
-// finishes a drag-resize, and the 'resized' listener's store write is not
-// guaranteed to have landed yet at that point.
+// chatCollapsed/chatAutoWidth settings. While collapsed, min/max height are
+// both locked to the thin-bar height so the window can't be drag-resized
+// taller than the CSS thin bar; while expanded, the normal min height is
+// restored and the max height is uncapped. Width works the same way, mirrored
+// onto the width axis: while auto-width is on, min/max width are both locked
+// to the roster-fitting width computed by chatWindowWidthFor so the user
+// can't drag-resize away from it (this is separate from - and applies even
+// when - chatLocked disables the window's movable/resizable flags entirely,
+// since setSize/setMinimumSize/setMaximumSize work regardless of those flags,
+// they only gate the user's own drag-resize). While auto-width is off, width
+// comes from the window's own current size, not the persisted
+// chatWindowWidth - this can run right after the user finishes a drag-resize,
+// and the 'resized' listener's store write is not guaranteed to have landed
+// yet at that point.
 function applyChatWindowSize(win) {
   const avatarSize = store.get('avatarSize');
+  const avatarMode = store.get('avatarMode');
   const collapsed = store.get('chatCollapsed');
-  const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
+  const autoWidth = store.get('chatAutoWidth');
+  const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
   const [currentWidth] = win.getSize();
-  if (collapsed) {
-    win.setMinimumSize(300, height);
+  const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : currentWidth;
+
+  const minHeight = collapsed ? height : HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT;
+  win.setMinimumSize(autoWidth ? width : 300, minHeight);
+
+  if (collapsed && autoWidth) {
+    win.setMaximumSize(width, height);
+  } else if (collapsed) {
     win.setMaximumSize(NO_MAX_WIDTH, height);
+  } else if (autoWidth) {
+    win.setMaximumSize(width, NO_MAX_HEIGHT);
   } else {
-    win.setMinimumSize(300, HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT);
     win.setMaximumSize(0, 0);
   }
-  win.setSize(currentWidth, height);
+  win.setSize(width, height);
 }
 
 function createChatWindow() {
@@ -203,13 +234,16 @@ function createChatWindow() {
     return;
   }
   const avatarSize = store.get('avatarSize');
+  const avatarMode = store.get('avatarMode');
   const collapsed = store.get('chatCollapsed');
+  const autoWidth = store.get('chatAutoWidth');
   const locked = store.get('chatLocked');
-  const height = chatWindowHeightFor(avatarSize, { collapsed, panelHeight: store.get('chatWindowPanelHeight') });
+  const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
+  const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : store.get('chatWindowWidth');
   chatWindow = new BrowserWindow({
-    width: store.get('chatWindowWidth'),
+    width,
     height,
-    minWidth: 300,
+    ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
     ...(collapsed
       ? { minHeight: height, maxHeight: height }
       : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
@@ -242,13 +276,16 @@ function createChatWindow() {
   });
   chatWindow.on('resized', () => {
     const [w, h] = chatWindow.getSize();
-    store.set('chatWindowWidth', w);
+    // While auto-width is on, width is locked and driven by the roster, not
+    // a user preference - skip persisting it so the user's last manual width
+    // survives an auto-width on/off round trip, same reasoning as the
+    // collapsed-height skip below.
+    if (!store.get('chatAutoWidth')) store.set('chatWindowWidth', w);
     // While collapsed the window is locked to the thin-bar height, which
     // isn't a real panel-height preference - skip persisting it so the
     // user's actual panel height survives a collapse/expand round trip.
     if (store.get('chatCollapsed')) return;
-    const currentAvatarSize = store.get('avatarSize');
-    const currentHeaderH = HEADER_HEIGHT_BY_AVATAR_SIZE[currentAvatarSize] ?? HEADER_HEIGHT_BY_AVATAR_SIZE.small;
+    const currentHeaderH = headerHeightFor(store.get('avatarSize'), store.get('avatarMode'));
     store.set('chatWindowPanelHeight', Math.max(h - currentHeaderH, MIN_CHAT_PANEL_HEIGHT));
   });
   chatWindow.loadURL(rendererUrl('chat'));
@@ -427,6 +464,7 @@ function registerIpcHandlers() {
     chatOpacity: store.get('chatOpacity'),
     chatCollapsed: store.get('chatCollapsed'),
     chatLocked: store.get('chatLocked'),
+    chatAutoWidth: store.get('chatAutoWidth'),
     chatFontFamily: store.get('chatFontFamily'),
     chatBorderStyle: store.get('chatBorderStyle'),
     hasSessionToken: Boolean(store.get('sessionToken')),
@@ -441,7 +479,7 @@ function registerIpcHandlers() {
     // Resize the already-open chat window immediately - otherwise a larger
     // avatar size, or a collapse/expand toggle, wouldn't take visual effect
     // (or would clip) until the next time the window happens to be recreated.
-    if (('avatarSize' in partial || 'chatCollapsed' in partial) && chatWindow) {
+    if (('avatarSize' in partial || 'avatarMode' in partial || 'chatCollapsed' in partial || 'chatAutoWidth' in partial) && chatWindow) {
       applyChatWindowSize(chatWindow);
     }
     // Same live-apply reasoning as above: movable/resizable are BrowserWindow

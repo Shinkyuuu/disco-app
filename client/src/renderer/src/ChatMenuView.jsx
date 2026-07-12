@@ -52,6 +52,7 @@ export default function ChatMenuView({ params }) {
     pin: params.has('pin'),
     collapse: params.has('collapse'),
     lock: params.has('lock'),
+    autoWidth: params.has('autoWidth'),
   };
   const openDirection = params.get('openDirection') === 'up' ? 'up' : 'down';
 
@@ -135,6 +136,11 @@ export default function ChatMenuView({ params }) {
         {sections.lock && (
           <button className="window-menu-item" onClick={() => changeSetting({ chatLocked: !settings.chatLocked })}>
             {settings.chatLocked ? 'Unlock window' : 'Lock window'}
+          </button>
+        )}
+        {sections.autoWidth && (
+          <button className="window-menu-item" onClick={() => changeSetting({ chatAutoWidth: !settings.chatAutoWidth })}>
+            {settings.chatAutoWidth ? 'Disable auto width' : 'Enable auto width'}
           </button>
         )}
         <button className="window-menu-item" onClick={() => window.api.closeChatWindow()}>
