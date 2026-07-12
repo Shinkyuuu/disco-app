@@ -11,6 +11,7 @@ import {
   handleAuthLogin,
   handleAuthCallback,
   handleAuthExchange,
+  handleAuthIcon,
   renderAuthSuccessPage,
 } from './auth.js';
 
@@ -91,6 +92,24 @@ test('renderAuthSuccessPage HTML-escapes the deep link (defense in depth - excha
   const html = renderAuthSuccessPage('disco://auth?code=abc"><script>alert(1)</script>');
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test('renderAuthSuccessPage shows the app icon and has no manual fallback link', () => {
+  const html = renderAuthSuccessPage('disco://auth?code=abc123');
+  assert.match(html, /<img[^>]+src="\/auth\/icon\.png"/);
+  assert.doesNotMatch(html, /<a[ >]/i);
+  assert.doesNotMatch(html, /didn't open automatically/i);
+});
+
+test('GET /auth/icon.png serves the app icon as a PNG', async () => {
+  const { server, port } = await startTestHttpServer(handleAuthIcon);
+  const res = await fetch(`http://localhost:${port}/auth/icon.png`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  const buf = Buffer.from(await res.arrayBuffer());
+  assert.ok(buf.length > 0);
+  assert.deepEqual(buf.subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])); // PNG magic bytes
+  server.close();
 });
 
 test('buildAuthorizeUrl includes the required OAuth params, including the CSRF state', () => {
