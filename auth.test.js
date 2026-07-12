@@ -11,6 +11,7 @@ import {
   handleAuthLogin,
   handleAuthCallback,
   handleAuthExchange,
+  renderAuthSuccessPage,
 } from './auth.js';
 
 function startTestHttpServer(handler) {
@@ -82,8 +83,14 @@ test('redeemExchangeCode returns null for an unknown code', () => {
 test('redeemExchangeCode returns null and purges an expired code', (t) => {
   t.mock.timers.enable({ apis: ['Date'] });
   const code = createExchangeCode('user-2');
-  t.mock.timers.tick(60 * 1000 + 1); // just past the 60s TTL
+  t.mock.timers.tick(5 * 60 * 1000 + 1); // just past the 5-minute TTL
   assert.equal(redeemExchangeCode(code), null);
+});
+
+test('renderAuthSuccessPage HTML-escapes the deep link (defense in depth - exchangeCode is always hex today, but the page must not trust that forever)', () => {
+  const html = renderAuthSuccessPage('disco://auth?code=abc"><script>alert(1)</script>');
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
 test('buildAuthorizeUrl includes the required OAuth params, including the CSRF state', () => {
@@ -140,7 +147,7 @@ test('handleAuthCallback forwards a Discord-side error without needing a matchin
   server.close();
 });
 
-test('handleAuthCallback exchanges a valid state+code for a disco:// redirect carrying a one-time exchange code (not the bearer token)', async (t) => {
+test('handleAuthCallback on success renders an HTML page (so the user sees confirmation, not a silent redirect) carrying a one-time exchange code (not the bearer token)', async (t) => {
   const realFetch = globalThis.fetch;
   t.mock.method(globalThis, 'fetch', async (url, opts) => {
     const href = String(url);
@@ -158,12 +165,18 @@ test('handleAuthCallback exchanges a valid state+code for a disco:// redirect ca
     redirect: 'manual',
     headers: { Cookie: 'disco_oauth_state=right' },
   });
-  assert.equal(res.status, 302);
-  const location = new URL(res.headers.get('location'));
-  assert.equal(location.protocol, 'disco:');
-  assert.equal(location.searchParams.get('token'), null); // the bearer token itself must never appear in a URL
-  const exchangeCode = location.searchParams.get('code');
-  assert.ok(exchangeCode);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type'), /text\/html/);
+  const setCookie = res.headers.get('set-cookie');
+  assert.match(setCookie, /disco_oauth_state=;/);
+  assert.match(setCookie, /Max-Age=0/);
+  const body = await res.text();
+  assert.match(body, /logged in/i); // the actual confirmation text the user is missing today
+  const deepLink = body.match(/disco:\/\/auth\?code=([^"'\s]+)/);
+  assert.ok(deepLink, 'expected a disco:// deep link embedded in the success page');
+  assert.doesNotMatch(body, /token=/); // the bearer token itself must never appear in a URL
+  assert.doesNotMatch(body, /fake-access-token/); // nor the literal access token this test's mock issued
+  const exchangeCode = deepLink[1];
   assert.equal(redeemExchangeCode(exchangeCode), 'user-999');
   server.close();
 });
