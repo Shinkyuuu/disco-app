@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 const SESSION_TOKEN_TTL_MS = 6 * 30 * 24 * 60 * 60 * 1000; // 6 months
-const EXCHANGE_CODE_TTL_MS = 60 * 1000; // 60s - just long enough for the OS to launch the disco:// link and the app to redeem it
+const EXCHANGE_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes - the success page may need a manual click (see renderAuthSuccessPage), not just an instant OS handoff
 const STATE_COOKIE_NAME = 'disco_oauth_state';
 const STATE_COOKIE_MAX_AGE_S = 300; // 5 minutes - generous for a slow OAuth consent screen
 
@@ -81,6 +81,48 @@ export function buildAuthorizeUrl(state) {
   url.searchParams.set('scope', 'identify');
   url.searchParams.set('state', state);
   return url.toString();
+}
+
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// A raw 302 straight to the disco:// scheme leaves the browser tab showing nothing of ours -
+// custom-scheme navigations never commit a document, so the tab is just left on whatever last
+// rendered (Discord's own consent screen), with no indication to the user that login succeeded.
+// Serving this page instead gives them that confirmation; the meta-refresh still launches the
+// app automatically (same as the old redirect did), and the link is a manual fallback for
+// browsers that block an automatic custom-scheme navigation from a meta-refresh.
+//
+// deepLinkUrl is HTML-escaped before being embedded below - it's always built from a hex-only
+// exchange code today so this can't currently matter, but this is a served HTML page, and that
+// value must never be trusted to stay hex-only forever just because it happens to be today.
+export function renderAuthSuccessPage(deepLinkUrl) {
+  const safeUrl = escapeHtml(deepLinkUrl);
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${safeUrl}">
+<title>Disco</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0d0e11; color: #f5f5f5; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }
+  a { color: #7c8cff; }
+</style>
+</head>
+<body>
+  <div>
+    <h1>You're logged in to Disco</h1>
+    <p>You can close this tab now.</p>
+    <p><a href="${safeUrl}">Click here</a> if the app didn't open automatically.</p>
+  </div>
+</body>
+</html>`;
 }
 
 function parseCookie(cookieHeader, name) {
@@ -175,11 +217,8 @@ export async function handleAuthCallback(req, res) {
     // session token - so the token itself never travels in a URL. See
     // createExchangeCode's comment for why.
     const exchangeCode = createExchangeCode(userId);
-    res.writeHead(302, {
-      Location: `disco://auth?code=${exchangeCode}`,
-      'Set-Cookie': clearStateCookie,
-    });
-    res.end();
+    res.writeHead(200, { 'Content-Type': 'text/html', 'Set-Cookie': clearStateCookie });
+    res.end(renderAuthSuccessPage(`disco://auth?code=${encodeURIComponent(exchangeCode)}`));
   } catch (err) {
     console.error('OAuth callback failed:', err);
     res.writeHead(302, { Location: 'disco://auth?error=callback_failed', 'Set-Cookie': clearStateCookie });
