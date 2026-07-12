@@ -90,9 +90,10 @@
 }
 
 /* Sizes are picked to leave headroom, within .chat-header's fixed height
-   (main/index.js + app.css .chat-header--*), for the username label above
-   and the speaking-glow's bleed (scale/translateY/blur) - so neither ever
-   clips against the top of the window. */
+   (main/index.js + app.css .chat-header--*, mode-qualified via
+   .chat-header--discord), for the username label above and the
+   speaking-glow's bleed (scale/translateY/blur) - so neither ever clips
+   against the top of the window. */
 .speaker-icon--discord {
   width: 81px;
   height: 81px;
@@ -143,12 +144,22 @@
 }
 
 /* --glow-color is set inline per-speaker (SpeakerStrip.jsx) from their name
-   color; falls back to the old fixed blue when a speaker has none set. Scale
-   and blur are kept modest so the glow's bleed stays within the avatar's
-   reserved headroom instead of clipping against the window's top edge. */
-.speaker-icon--speaking {
+   color; falls back to the old fixed blue when a speaker has none set. */
+.speaker-icon--custom.speaker-icon--speaking {
   transform: translateY(-2px) scale(1.05);
   filter:
-    drop-shadow(0 3px 4px rgba(255, 255, 255, 0.5))
-    drop-shadow(0 0 8px color-mix(in srgb, var(--glow-color, #58a6ff) 80%, transparent));
+    drop-shadow(0 2px 2px rgba(255, 255, 255, 0.65))
+    drop-shadow(0 0 4px var(--glow-color, #58a6ff));
+}
+
+/* Discord avatars only get a few px of bottom margin (see margin-bottom on
+   .speaker-icon--discord above) with no chat panel below to mask a clipped
+   edge while the window is collapsed, so the blur here is kept just small
+   enough that the bleed stays inside that margin at every size (verified
+   against the small/collapsed case, the tightest headroom available). */
+.speaker-icon--discord.speaker-icon--speaking {
+  transform: translateY(-2px) scale(1.05);
+  filter:
+    drop-shadow(0 2px 2px rgba(255, 255, 255, 0.7))
+    drop-shadow(0 0 4px var(--glow-color, #58a6ff));
 }
