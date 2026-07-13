@@ -226,6 +226,12 @@ async function startTranscribing(guildId, channelId, connection, userId) {
       console.error(`[${userId}] Failed to parse Deepgram message:`, err);
       return;
     }
+    // Flux sends fatal errors in-band on the still-open socket rather than as a
+    // WebSocket close/error event, so without this they'd vanish silently.
+    if (msg.type === 'Error') {
+      console.error(`[${userId}] Deepgram Flux error:`, msg.code, msg.description);
+      return;
+    }
     const transcript = extractFluxTranscript(msg);
     if (!transcript) return;
     broadcastToSession(guildId, {
