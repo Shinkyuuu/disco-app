@@ -40,7 +40,7 @@ export function resolveMaxActiveSessions(raw) {
 
 const MAX_ACTIVE_SESSIONS = resolveMaxActiveSessions(process.env.MAX_ACTIVE_SESSIONS);
 
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=nova-3';
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=Flux';
 
 const commands = [
   {
