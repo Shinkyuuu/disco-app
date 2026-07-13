@@ -3,8 +3,8 @@
 // chatWindowSize.js for the same reasoning).
 
 // The dropdown itself is a fixed-width box (see .window-menu-dropdown in
-// app.css); the popup window is wider than that to leave room on the left
-// for the avatar-size/chat-size submenus, which open further left on hover.
+// app.css); the popup window is wider than that to leave room on the right
+// for the avatar-size/chat-size submenus, which open further right on hover.
 export const MENU_POPUP_WIDTH = 250;
 
 // Generously-rounded row heights matching the CSS (.window-menu-item,
@@ -30,13 +30,13 @@ export function chatMenuHeightFor(sections) {
   return height;
 }
 
-// Right-aligns the popup to the ⋯ button's right edge (matching the
-// dropdown's previous right:0 anchoring) and opens it downward unless there
-// isn't room in the work area, in which case it opens upward instead - the
-// popup is independent of the main chat window, so it's always safe to move.
+// Left-aligns the popup to the ⋯ button's left edge (matching the ⋯ button's
+// own left:0 anchoring) and opens it downward unless there isn't room in the
+// work area, in which case it opens upward instead - the popup is independent
+// of the main chat window, so it's always safe to move.
 export function chatMenuPositionFor(anchor, size, workArea) {
   const x = Math.min(
-    Math.max(Math.round(anchor.x + anchor.width - size.width), workArea.x),
+    Math.max(Math.round(anchor.x), workArea.x),
     workArea.x + workArea.width - size.width,
   );
   const opensBelow = anchor.y + anchor.height + size.height <= workArea.y + workArea.height;

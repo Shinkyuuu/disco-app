@@ -95,23 +95,23 @@
    speaking-glow's bleed (scale/translateY/blur) - so neither ever clips
    against the top of the window. */
 .speaker-icon--discord {
-  width: 81px;
-  height: 81px;
+  width: 73px;
+  height: 73px;
   border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
-  margin-bottom: 6px; /* floats just above the chat panel's top edge */
+  margin-bottom: 14px; /* floats just above the chat panel's top edge */
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
 }
 
 .speaker-icon--discord.speaker-icon--medium {
-  width: 113px;
-  height: 113px;
-  margin-bottom: 8px;
+  width: 102px;
+  height: 102px;
+  margin-bottom: 19px;
 }
 
 .speaker-icon--discord.speaker-icon--large {
-  width: 144px;
-  height: 144px;
-  margin-bottom: 10px;
+  width: 130px;
+  height: 130px;
+  margin-bottom: 24px;
 }
 
 .speaker-icon--custom {
@@ -133,9 +133,15 @@
   margin-bottom: -24px;
 }
 
+/* Discord avatars only get a few px of bottom margin (see margin-bottom on
+   .speaker-icon--discord above) with no chat panel below to mask a clipped
+   edge while the window is collapsed, so the downward shift/blur here is
+   kept much smaller than the custom-icon version below so the bleed stays
+   inside that margin at every size (same reasoning as the discord
+   speaking-glow rule further down). */
 .speaker-icon--discord.speaker-icon--silenced {
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7)) brightness(0.3) saturate(0.3);
-  transform: translateY(10px) scale(0.93);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)) brightness(0.3) saturate(0.3);
+  transform: translateY(1px) scale(0.93);
 }
 
 .speaker-icon--custom.speaker-icon--silenced {

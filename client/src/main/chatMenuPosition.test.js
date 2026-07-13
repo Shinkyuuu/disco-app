@@ -20,14 +20,14 @@ test('chatMenuHeightFor grows when the autoWidth section is enabled', () => {
   assert.ok(withAutoWidth > exitOnly);
 });
 
-test('chatMenuPositionFor opens downward and right-aligns to the anchor when there is room', () => {
+test('chatMenuPositionFor opens downward and left-aligns to the anchor when there is room', () => {
   const anchor = { x: 700, y: 500, width: 24, height: 24 };
   const size = { width: MENU_POPUP_WIDTH, height: 300 };
   const workArea = { x: 0, y: 0, width: 1920, height: 1080 };
   const result = chatMenuPositionFor(anchor, size, workArea);
   assert.equal(result.opensBelow, true);
   assert.equal(result.y, 524); // anchor bottom
-  assert.equal(result.x, 700 + 24 - MENU_POPUP_WIDTH);
+  assert.equal(result.x, 700); // anchor left
 });
 
 test('chatMenuPositionFor opens upward when there is no room below', () => {

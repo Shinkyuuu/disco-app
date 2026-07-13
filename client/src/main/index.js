@@ -200,28 +200,41 @@ function stopProfilePolling() {
 }
 
 // Resizes an already-open chat window to match the current avatarSize/
-// chatCollapsed/chatAutoWidth settings. While collapsed, min/max height are
-// both locked to the thin-bar height so the window can't be drag-resized
-// taller than the CSS thin bar; while expanded, the normal min height is
-// restored and the max height is uncapped. Width works the same way, mirrored
-// onto the width axis: while auto-width is on, min/max width are both locked
-// to the roster-fitting width computed by chatWindowWidthFor so the user
-// can't drag-resize away from it (this is separate from - and applies even
-// when - chatLocked disables the window's movable/resizable flags entirely,
-// since setSize/setMinimumSize/setMaximumSize work regardless of those flags,
-// they only gate the user's own drag-resize). While auto-width is off, width
+// chatCollapsed/chatAutoWidth/chatLocked settings. While collapsed, min/max
+// height are both locked to the thin-bar height so the window can't be
+// drag-resized taller than the CSS thin bar; while expanded, the normal min
+// height is restored and the max height is uncapped. Width works the same
+// way, mirrored onto the width axis: while auto-width is on, min/max width
+// are both locked to the roster-fitting width computed by chatWindowWidthFor
+// so the user can't drag-resize away from it. While auto-width is off, width
 // comes from the window's own current size, not the persisted
 // chatWindowWidth - this can run right after the user finishes a drag-resize,
 // and the 'resized' listener's store write is not guaranteed to have landed
 // yet at that point.
+//
+// chatLocked freezes min=max=current size instead of calling
+// win.setResizable(false) - Electron 39 has a known Windows regression where
+// toggling setResizable() at runtime on a transparent, frameless window
+// desyncs the native resize-border cursor from the resize capability Chromium
+// actually enforces (still works, but shows the wrong/stale cursor). Pinning
+// min/max size achieves the same "can't drag-resize" effect without ever
+// calling setResizable() after construction.
 function applyChatWindowSize(win) {
   const avatarSize = store.get('avatarSize');
   const avatarMode = store.get('avatarMode');
   const collapsed = store.get('chatCollapsed');
   const autoWidth = store.get('chatAutoWidth');
+  const locked = store.get('chatLocked');
   const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
   const [currentWidth] = win.getSize();
   const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : currentWidth;
+
+  if (locked) {
+    win.setMinimumSize(width, height);
+    win.setMaximumSize(width, height);
+    win.setSize(width, height);
+    return;
+  }
 
   const minHeight = collapsed ? height : HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT;
   win.setMinimumSize(autoWidth ? width : 300, minHeight);
@@ -238,6 +251,25 @@ function applyChatWindowSize(win) {
   win.setSize(width, height);
 }
 
+// The persisted chatWindowPosition, if it's still on a currently-connected
+// display - ignored otherwise so a position saved on a monitor that's since
+// been unplugged doesn't strand the window off-screen with no way to drag it
+// back (this app is a streaming overlay, so multi-monitor setups changing
+// are a real, not hypothetical, case).
+function chatWindowPositionOnScreen() {
+  const position = store.get('chatWindowPosition');
+  if (!position) return null;
+  const onScreen = screen
+    .getAllDisplays()
+    .some(({ bounds }) =>
+      position.x >= bounds.x &&
+      position.y >= bounds.y &&
+      position.x < bounds.x + bounds.width &&
+      position.y < bounds.y + bounds.height
+    );
+  return onScreen ? position : null;
+}
+
 function createChatWindow() {
   if (chatWindow) {
     chatWindow.focus();
@@ -250,19 +282,29 @@ function createChatWindow() {
   const locked = store.get('chatLocked');
   const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
   const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : store.get('chatWindowWidth');
+  const savedPosition = chatWindowPositionOnScreen();
   chatWindow = new BrowserWindow({
     width,
     height,
-    ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
-    ...(collapsed
-      ? { minHeight: height, maxHeight: height }
-      : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
+    ...(savedPosition ? { x: savedPosition.x, y: savedPosition.y } : {}),
+    // While locked, min/max are both pinned to the current size instead of
+    // passing resizable: false - see applyChatWindowSize's comment for why
+    // (a runtime setResizable() toggle is what triggers the Electron 39
+    // Windows cursor bug, not the size constraints).
+    ...(locked
+      ? { minWidth: width, maxWidth: width, minHeight: height, maxHeight: height }
+      : {
+          ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
+          ...(collapsed
+            ? { minHeight: height, maxHeight: height }
+            : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
+        }),
     frame: false,
     icon: ICON_PATH,
     // Transparent so the header strip above the chat panel is invisible -
     // speaker avatars render there and appear to float above the window.
     transparent: true,
-    resizable: !locked,
+    resizable: true,
     movable: !locked,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -283,6 +325,10 @@ function createChatWindow() {
   chatWindow.on('blur', () => {
     if (chatMenuWindow) return;
     if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
+  });
+  chatWindow.on('moved', () => {
+    const [x, y] = chatWindow.getPosition();
+    store.set('chatWindowPosition', { x, y });
   });
   chatWindow.on('resized', () => {
     const [w, h] = chatWindow.getSize();
@@ -335,14 +381,13 @@ function createChatMenuWindow(anchor, sections) {
     transparent: true,
     resizable: false,
     movable: false,
-    // Shown immediately (not the usual show:false + 'ready-to-show' dance) -
-    // x/y/width/height are already fully known up front here, unlike windows
-    // that size themselves to measured content, so there's no flash of
-    // wrong-sized content to hide. Windows applies its own fade to a
-    // transparent window's *visibility transitions*, so showing it as part
-    // of creation rather than as a separate later show() call avoids that
-    // transition entirely, instead of merely hiding it behind a delay.
-    show: true,
+    // Same show:false + 'ready-to-show' pattern as launcherWindow/updaterWindow
+    // above - showing immediately (before Chromium's first paint) let Windows
+    // present the OS window surface as opaque white first, which then flashed
+    // to transparent and finally to the real dropdown content once
+    // ChatMenuView's async settings fetch resolved - visible as an open/close/
+    // reopen flicker with a white flash in between.
+    show: false,
     skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -351,6 +396,7 @@ function createChatMenuWindow(anchor, sections) {
     },
   });
   chatMenuWindow.setAlwaysOnTop(true, 'screen-saver');
+  chatMenuWindow.once('ready-to-show', () => chatMenuWindow?.show());
   chatMenuWindow.loadURL(rendererUrl('chat-menu') + '&' + menuSectionsQuery(sections) + `&openDirection=${opensBelow ? 'down' : 'up'}`);
   // Losing focus means the user clicked elsewhere (the chat window, another
   // app, the desktop) - same dismissal a normal dropdown gets from a
@@ -499,14 +545,15 @@ function registerIpcHandlers() {
     // Resize the already-open chat window immediately - otherwise a larger
     // avatar size, or a collapse/expand toggle, wouldn't take visual effect
     // (or would clip) until the next time the window happens to be recreated.
-    if (('avatarSize' in sanitized || 'avatarMode' in sanitized || 'chatCollapsed' in sanitized || 'chatAutoWidth' in sanitized) && chatWindow) {
+    if (('avatarSize' in sanitized || 'avatarMode' in sanitized || 'chatCollapsed' in sanitized || 'chatAutoWidth' in sanitized || 'chatLocked' in sanitized) && chatWindow) {
       applyChatWindowSize(chatWindow);
     }
-    // Same live-apply reasoning as above: movable/resizable are BrowserWindow
-    // properties, not CSS, so an open window needs them flipped directly.
+    // Same live-apply reasoning as above: movable is a BrowserWindow property,
+    // not CSS, so an open window needs it flipped directly. (Resizing is
+    // frozen via applyChatWindowSize's min=max pinning above, not
+    // setResizable() - see its comment for why.)
     if ('chatLocked' in sanitized && chatWindow) {
       chatWindow.setMovable(!sanitized.chatLocked);
-      chatWindow.setResizable(!sanitized.chatLocked);
     }
     // getSettings is only read once, on mount, by every renderer - push every
     // change through so an already-open chat window (and its ⋯ menu popup,
@@ -661,6 +708,7 @@ app.on('window-all-closed', () => {
 });
 
 let updaterOpenedAt = 0;
+let updateVersion = null;
 const MIN_UPDATER_MS = 1000;
 let didTransitionToLauncher = false;
 
@@ -705,14 +753,16 @@ function setupAutoUpdater() {
     transitionToLauncher();
   });
   autoUpdater.on('update-available', (info) => {
-    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: info.version, percent: 0 });
+    updateVersion = info.version;
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: updateVersion, percent: 0 });
   });
   autoUpdater.on('download-progress', (progress) => {
-    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', percent: Math.floor(progress.percent) });
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: updateVersion, percent: Math.floor(progress.percent) });
   });
   autoUpdater.on('update-downloaded', () => {
-    // Silent install; relaunch after install completes.
-    autoUpdater.quitAndInstall(true, true);
+    // Not silent: shows the one-click NSIS installer's native progress window
+    // during install so the app doesn't appear to hang; relaunch after install completes.
+    autoUpdater.quitAndInstall(false, true);
   });
   autoUpdater.on('error', () => {
     transitionToLauncher();
