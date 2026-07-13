@@ -49,7 +49,10 @@ export function extractFluxTranscript(msg) {
   return msg.transcript || null;
 }
 
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v2/listen?encoding=linear16&sample_rate=48000&channels=1&model=flux-general-en';
+// v2/listen rejects a 'channels' query param outright (400 INVALID_QUERY_PARAMETER) -
+// Flux only accepts mono audio, so it isn't a configurable value like on v1/listen.
+// The decoder below still emits mono PCM to match what Flux expects on the wire.
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v2/listen?encoding=linear16&sample_rate=48000&model=flux-general-en';
 
 const commands = [
   {
