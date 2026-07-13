@@ -179,21 +179,11 @@ function buildRoster(channel) {
 async function startTranscribing(guildId, channelId, connection, userId) {
   const key = `${guildId}:${userId}`;
   if (activeStreams.has(key)) return;
-  activeStreams.set(key, null);
 
-  let speaker;
-  try {
-    speaker = await resolveSpeaker(guildId, userId);
-  } catch (err) {
-    // Release the reservation on failure (e.g. the user left the guild before this
-    // resolved) so a later speaking event for this user isn't silently no-op'd forever.
-    activeStreams.delete(key);
-    throw err;
-  }
-
-  // /disco leave may have run while the attribution lookup above was in flight.
-  if (!activeStreams.has(key)) return;
-
+  // Subscribe immediately, synchronously, before any `await` below - @discordjs/voice
+  // silently and permanently drops any packets for a userId with no registered
+  // subscription (no buffering), so the async speaker-info lookup further down can't
+  // be allowed to delay this or early audio is lost before it's ever captured.
   const opusStream = connection.receiver.subscribe(userId, {
     end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 },
   });
@@ -203,9 +193,13 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   const dgSocket = new WebSocket(DEEPGRAM_URL, { headers: { Authorization: `Token ${DEEPGRAM_API_KEY}` } });
   let dgOpen = false;
   let buffered = [];
+  let speaker;
+  let windingDown = false;
+  let stopPadding = () => {};
 
   // Identity, not just key, so a stale pipeline's error/close can't delete a newer one's entry.
   const entry = { opusStream, dgSocket };
+  activeStreams.set(key, entry);
 
   dgSocket.on('open', () => {
     dgOpen = true;
@@ -219,6 +213,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   });
 
   dgSocket.on('message', (data) => {
+    if (!speaker) return; // message arrived before speaker info resolved below
     let msg;
     try {
       msg = JSON.parse(data.toString());
@@ -231,6 +226,12 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     if (msg.type === 'Error') {
       console.error(`[${userId}] Deepgram Flux error:`, msg.code, msg.description);
       return;
+    }
+    // Only the wind-down phase (opusStream already ended) should close the socket on
+    // EndOfTurn - during active speech a turn can end and a new one begin mid-stream.
+    if (windingDown && msg.type === 'TurnInfo' && msg.event === 'EndOfTurn') {
+      stopPadding();
+      dgSocket.close();
     }
     const transcript = extractFluxTranscript(msg);
     if (!transcript) return;
@@ -246,9 +247,11 @@ async function startTranscribing(guildId, channelId, connection, userId) {
 
   dgSocket.on('error', (err) => {
     console.error(`[${userId}] Deepgram error:`, err);
+    stopPadding();
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
   });
   dgSocket.on('close', () => {
+    stopPadding();
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
   });
 
@@ -263,26 +266,55 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   // 'error' listeners on the same long-lived stream instance.
   opusStream.on('error', (err) => {
     console.error(`[${userId}] Opus receive error:`, err);
+    stopPadding();
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
     dgSocket.close();
     decoder.destroy();
   });
   decoder.on('error', (err) => {
     console.error(`[${userId}] Opus decode error:`, err);
+    stopPadding();
     if (activeStreams.get(key) === entry) activeStreams.delete(key);
     dgSocket.close();
     opusStream.destroy();
   });
 
-  activeStreams.set(key, entry);
-
+  // Discord stops delivering any packets at all the instant the user goes quiet - but
+  // Flux tracks turn/silence timing against the audio timeline it's fed, not wall-clock
+  // time, so with no more bytes flowing its internal clock never advances and the
+  // in-progress turn's transcript is silently discarded when the connection closes.
+  // Feeding real silence PCM here lets Flux's own turn detection (or its eot_timeout_ms
+  // fallback, 5s by default) actually finalize the turn before we close.
   opusStream.once('end', () => {
-    if (dgOpen) {
-      dgSocket.send(JSON.stringify({ type: 'CloseStream' }));
-    } else {
+    if (!dgOpen) {
       dgSocket.close();
+      return;
     }
+    windingDown = true;
+    const silenceFrame = Buffer.alloc(960 * 2); // 20ms of mono 48kHz linear16 silence
+    const padInterval = setInterval(() => dgSocket.send(silenceFrame), 20);
+    const giveUp = setTimeout(() => {
+      stopPadding();
+      dgSocket.close();
+    }, 6000); // covers Flux's default 5s eot_timeout_ms plus margin
+    stopPadding = () => {
+      clearInterval(padInterval);
+      clearTimeout(giveUp);
+    };
   });
+
+  try {
+    speaker = await resolveSpeaker(guildId, userId);
+  } catch (err) {
+    // Release the reservation on failure (e.g. the user left the guild before this
+    // resolved) so a later speaking event for this user isn't silently no-op'd forever.
+    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    stopPadding();
+    opusStream.destroy();
+    decoder.destroy();
+    dgSocket.close();
+    throw err;
+  }
 }
 
 function stopTranscribing(guildId) {
