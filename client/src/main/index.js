@@ -661,6 +661,7 @@ app.on('window-all-closed', () => {
 });
 
 let updaterOpenedAt = 0;
+let updateVersion = null;
 const MIN_UPDATER_MS = 1000;
 let didTransitionToLauncher = false;
 
@@ -705,14 +706,16 @@ function setupAutoUpdater() {
     transitionToLauncher();
   });
   autoUpdater.on('update-available', (info) => {
-    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: info.version, percent: 0 });
+    updateVersion = info.version;
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: updateVersion, percent: 0 });
   });
   autoUpdater.on('download-progress', (progress) => {
-    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', percent: Math.floor(progress.percent) });
+    updaterWindow?.webContents.send('updater-status', { phase: 'downloading', version: updateVersion, percent: Math.floor(progress.percent) });
   });
   autoUpdater.on('update-downloaded', () => {
-    // Silent install; relaunch after install completes.
-    autoUpdater.quitAndInstall(true, true);
+    // Not silent: shows the one-click NSIS installer's native progress window
+    // during install so the app doesn't appear to hang; relaunch after install completes.
+    autoUpdater.quitAndInstall(false, true);
   });
   autoUpdater.on('error', () => {
     transitionToLauncher();
