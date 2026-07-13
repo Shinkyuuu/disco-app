@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   resizeWindow: (width, height) => ipcRenderer.invoke('resize-window', { width, height }),
   isAlwaysOnTop: () => ipcRenderer.invoke('window-is-always-on-top'),
   setAlwaysOnTop: (value) => ipcRenderer.invoke('window-set-always-on-top', value),
+  setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('set-ignore-mouse-events', ignore),
   closeChatWindow: () => ipcRenderer.invoke('close-chat-window'),
   openChatMenu: (anchor, sections) => ipcRenderer.invoke('open-chat-menu', { anchor, sections }),
   getProfile: () => ipcRenderer.invoke('get-profile'),
