@@ -38,6 +38,7 @@ jobs:
     needs: build-and-push
     runs-on: [self-hosted, Windows, disco-server]
     permissions:
+      contents: read
       packages: read
     steps:
       - uses: actions/checkout@v4

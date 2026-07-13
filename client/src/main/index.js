@@ -780,7 +780,9 @@ function transitionToLauncher() {
 }
 
 function setupAutoUpdater() {
-  autoUpdater.allowPrerelease = store.get('betaUpdates');
+  const betaUpdates = store.get('betaUpdates');
+  autoUpdater.allowPrerelease = betaUpdates;
+  autoUpdater.channel = betaUpdates ? 'beta' : null;
 
   autoUpdater.on('update-not-available', () => {
     transitionToLauncher();
