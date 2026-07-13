@@ -35,17 +35,17 @@ export const AVATAR_WIDTH_BY_SIZE = { small: 96, medium: 146, large: 194 };
 export const AVATAR_WIDTH_BY_SIZE_DISCORD = { small: 73, medium: 102, large: 130 };
 // .speaker-strip's gap, per avatar size - see SpeakerStrip.css.
 export const AVATAR_GAP_BY_SIZE = { small: 8, medium: 10, large: 12 };
-// .chat-header's `padding: 0 16px` in app.css - the avatar row's horizontal
-// breathing room the window width also has to include.
+// .chat-header's left+right padding in app.css (16px each side) - the avatar
+// row's horizontal breathing room the window width also has to include.
 const HEADER_HORIZONTAL_PADDING = 32;
 export const MIN_CHAT_WINDOW_WIDTH = 300;
 // The floating ⋯ menu button (.window-menu in app.css) is positioned
-// right:6px against the window's own right edge, independent of the avatar
-// strip - with the header's row packed flush against that same edge, the
-// button would otherwise sit directly on top of the last avatar's
-// muted/deafened status badge (.speaker-status-icon, which itself sticks out
-// past the avatar's edge). This reserves constant breathing room to its left.
-const MENU_BUTTON_CLEARANCE = 28;
+// left:6px against the window's own left edge, independent of the avatar
+// strip - .chat-header's extra left padding (see app.css) reserves this much
+// additional room to its right. Deliberately kept smaller than the button's
+// own footprint so the first avatar overlaps it slightly rather than leaving
+// a visible gap.
+const MENU_BUTTON_CLEARANCE = 12;
 
 // Chat window width for the auto-width setting: exactly wide enough to fit
 // every avatar in the roster's single-row strip (see SpeakerStrip.jsx) side

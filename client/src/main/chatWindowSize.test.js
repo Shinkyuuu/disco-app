@@ -50,13 +50,13 @@ test('custom avatarMode (or unspecified) keeps the original header heights', () 
 
 test('width sums avatar widths plus gaps for a discord-mode roster, using the discord avatar table', () => {
   const n = 5;
-  const expected = n * AVATAR_WIDTH_BY_SIZE_DISCORD.medium + (n - 1) * AVATAR_GAP_BY_SIZE.medium + 32 + 28;
+  const expected = n * AVATAR_WIDTH_BY_SIZE_DISCORD.medium + (n - 1) * AVATAR_GAP_BY_SIZE.medium + 32 + 12;
   assert.equal(chatWindowWidthFor(n, 'medium', 'discord'), expected);
 });
 
 test('width uses the custom avatar table for custom avatarMode', () => {
   const n = 4;
-  const expected = n * AVATAR_WIDTH_BY_SIZE.large + (n - 1) * AVATAR_GAP_BY_SIZE.large + 32 + 28;
+  const expected = n * AVATAR_WIDTH_BY_SIZE.large + (n - 1) * AVATAR_GAP_BY_SIZE.large + 32 + 12;
   assert.equal(chatWindowWidthFor(n, 'large', 'custom'), expected);
 });
 

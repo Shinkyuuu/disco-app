@@ -113,7 +113,7 @@ select {
 .window-menu {
   position: absolute;
   bottom: 100%;
-  right: 6px;
+  left: 6px;
   margin-bottom: 6px;
   -webkit-app-region: no-drag;
   z-index: 10;
@@ -140,21 +140,21 @@ select {
   background: #26272d;
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  overflow: visible; /* the avatar-size submenu extends past this box's left edge */
+  overflow: visible; /* the avatar-size submenu extends past this box's right edge */
   min-width: 120px;
   padding: 4px;
 }
 
 /* The popup window is wider than the dropdown itself, reserving room on the
-   left for the avatar-size/chat-size submenus (which open further left on
-   hover) - right-align the dropdown within it, matching how it used to hang
-   from the ⋯ button's right edge. Vertically, flush the dropdown against
-   whichever edge is adjacent to the button: top when the popup opened below
-   it, bottom when it opened above (see openDirection in ChatMenuView). */
+   right for the avatar-size/chat-size submenus (which open further right on
+   hover) - left-align the dropdown within it, matching how it hangs from the
+   ⋯ button's left edge. Vertically, flush the dropdown against whichever edge
+   is adjacent to the button: top when the popup opened below it, bottom when
+   it opened above (see openDirection in ChatMenuView). */
 .chat-menu-popup {
   display: flex;
   height: 100%;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .chat-menu-popup--down {
@@ -228,7 +228,7 @@ select {
 
 .window-menu-submenu {
   position: absolute;
-  right: 100%;
+  left: 100%;
   top: 0;
   background: #2e2f37;
   border-radius: 6px;
@@ -568,7 +568,11 @@ select {
   flex: none;
   display: flex;
   align-items: flex-end;
-  padding: 0 16px;
+  /* Left padding is wider than the right to mostly clear the ⋯ button
+     (.window-menu, left:6px) floating over this header's bottom-left corner -
+     see MENU_BUTTON_CLEARANCE in chatWindowSize.js, kept in sync with this.
+     Deliberately tight enough that the first avatar overlaps it slightly. */
+  padding: 0 16px 0 28px;
   overflow: hidden;
   -webkit-app-region: drag;
 }
