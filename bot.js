@@ -40,7 +40,16 @@ export function resolveMaxActiveSessions(raw) {
 
 const MAX_ACTIVE_SESSIONS = resolveMaxActiveSessions(process.env.MAX_ACTIVE_SESSIONS);
 
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v1/listen?encoding=linear16&sample_rate=48000&channels=2&endpointing=300&model=Flux';
+// Flux only finalizes a turn's transcript on the EndOfTurn event - forwarding the
+// intermediate Update events here would post the same growing utterance as separate
+// chat lines, since the client treats every 'transcript' broadcast as an independent
+// finalized line (see client/src/main/index.js's 'transcript' handler).
+export function extractFluxTranscript(msg) {
+  if (msg.type !== 'TurnInfo' || msg.event !== 'EndOfTurn') return null;
+  return msg.transcript || null;
+}
+
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v2/listen?encoding=linear16&sample_rate=48000&channels=1&model=flux-general-en';
 
 const commands = [
   {
@@ -185,7 +194,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   const opusStream = connection.receiver.subscribe(userId, {
     end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 },
   });
-  const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
+  const decoder = new prism.opus.Decoder({ rate: 48000, channels: 1, frameSize: 960 });
   const pcmStream = opusStream.pipe(decoder);
 
   const dgSocket = new WebSocket(DEEPGRAM_URL, { headers: { Authorization: `Token ${DEEPGRAM_API_KEY}` } });
@@ -214,7 +223,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
       console.error(`[${userId}] Failed to parse Deepgram message:`, err);
       return;
     }
-    const transcript = msg.channel?.alternatives?.[0]?.transcript;
+    const transcript = extractFluxTranscript(msg);
     if (!transcript) return;
     broadcastToSession(guildId, {
       type: 'transcript',
