@@ -13,6 +13,7 @@ export const store = new Store({
     chatBorderStyle: 'hard',
     chatWindowWidth: 480,
     chatWindowPanelHeight: 324,
+    chatWindowPosition: null,
     sessionToken: null,
     loggedInUserId: null,
     defaultProfiles: Array.from({ length: 10 }, () => ({ usernameColor: null, chatColor: null })),
