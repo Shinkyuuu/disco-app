@@ -27,6 +27,7 @@ export const store = new Store({
     chatAutoWidth: false,
     chatFontFamily: 'plus-jakarta-sans',
     chatBorderStyle: 'hard',
+    betaUpdates: false,
     chatWindowWidth: 480,
     chatWindowPanelHeight: 324,
     chatWindowPosition: null,

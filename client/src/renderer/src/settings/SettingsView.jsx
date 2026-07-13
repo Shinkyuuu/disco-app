@@ -61,6 +61,14 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
               <option value="custom">Custom image</option>
             </select>
           </label>
+          <label className="settings-field">
+            Receive beta updates
+            <input
+              type="checkbox"
+              checked={settings.betaUpdates ?? false}
+              onChange={(e) => onSettingsChange({ betaUpdates: e.target.checked }, true)}
+            />
+          </label>
         </section>
 
         <ChatAppearanceSection settings={settings} onSettingsChange={onSettingsChange} />
