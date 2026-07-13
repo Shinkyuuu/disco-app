@@ -285,11 +285,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   // in-progress turn's transcript is silently discarded when the connection closes.
   // Feeding real silence PCM here lets Flux's own turn detection (or its eot_timeout_ms
   // fallback, 5s by default) actually finalize the turn before we close.
-  opusStream.once('end', () => {
-    if (!dgOpen) {
-      dgSocket.close();
-      return;
-    }
+  const startPadding = () => {
     windingDown = true;
     const silenceFrame = Buffer.alloc(960 * 2); // 20ms of mono 48kHz linear16 silence
     const padInterval = setInterval(() => dgSocket.send(silenceFrame), 20);
@@ -301,6 +297,16 @@ async function startTranscribing(guildId, channelId, connection, userId) {
       clearInterval(padInterval);
       clearTimeout(giveUp);
     };
+  };
+
+  opusStream.once('end', () => {
+    // For a very short utterance, the Deepgram handshake may not have finished yet -
+    // `buffered` (see the pcmStream 'data' handler above) already holds the entire
+    // utterance's audio in that case, and the existing 'open' handler above flushes it
+    // the moment the socket connects, so wait for that instead of abandoning it here.
+    // If the socket never opens, its own 'error'/'close' handlers already clean up.
+    if (dgOpen) startPadding();
+    else dgSocket.once('open', startPadding);
   });
 
   try {
