@@ -5,6 +5,7 @@ on:
     branches: [develop]
     paths:
       - 'client/**'
+  workflow_dispatch: {}
 
 permissions:
   contents: write
