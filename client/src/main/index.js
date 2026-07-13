@@ -251,6 +251,25 @@ function applyChatWindowSize(win) {
   win.setSize(width, height);
 }
 
+// The persisted chatWindowPosition, if it's still on a currently-connected
+// display - ignored otherwise so a position saved on a monitor that's since
+// been unplugged doesn't strand the window off-screen with no way to drag it
+// back (this app is a streaming overlay, so multi-monitor setups changing
+// are a real, not hypothetical, case).
+function chatWindowPositionOnScreen() {
+  const position = store.get('chatWindowPosition');
+  if (!position) return null;
+  const onScreen = screen
+    .getAllDisplays()
+    .some(({ bounds }) =>
+      position.x >= bounds.x &&
+      position.y >= bounds.y &&
+      position.x < bounds.x + bounds.width &&
+      position.y < bounds.y + bounds.height
+    );
+  return onScreen ? position : null;
+}
+
 function createChatWindow() {
   if (chatWindow) {
     chatWindow.focus();
@@ -263,9 +282,11 @@ function createChatWindow() {
   const locked = store.get('chatLocked');
   const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
   const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : store.get('chatWindowWidth');
+  const savedPosition = chatWindowPositionOnScreen();
   chatWindow = new BrowserWindow({
     width,
     height,
+    ...(savedPosition ? { x: savedPosition.x, y: savedPosition.y } : {}),
     // While locked, min/max are both pinned to the current size instead of
     // passing resizable: false - see applyChatWindowSize's comment for why
     // (a runtime setResizable() toggle is what triggers the Electron 39
@@ -304,6 +325,10 @@ function createChatWindow() {
   chatWindow.on('blur', () => {
     if (chatMenuWindow) return;
     if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
+  });
+  chatWindow.on('moved', () => {
+    const [x, y] = chatWindow.getPosition();
+    store.set('chatWindowPosition', { x, y });
   });
   chatWindow.on('resized', () => {
     const [w, h] = chatWindow.getSize();
