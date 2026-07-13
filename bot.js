@@ -114,8 +114,13 @@ async function resolveSpeaker(guildId, userId) {
   return { username: member.displayName, avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }) };
 }
 
-// key: `${guildId}:${userId}` -> { opusStream, dgSocket } | null (reserved while resolving speaker)
+// key: `${guildId}:${userId}` -> { guildId, opusStream, dgSocket, decoder }
 const activeStreams = new Map();
+// Pipelines whose opusStream has already ended but are still padding out silence to let
+// Deepgram finalize the turn. Kept out of activeStreams so a user resuming speech during
+// that window starts a fresh pipeline immediately instead of being blocked - but still
+// tracked here so /disco leave (stopTranscribing) can find and tear them down too.
+const windingDownStreams = new Set();
 
 // A Discord user can only be connected to one voice channel platform-wide at a time, so
 // at most one guild will ever have a cached voice state for a given userId. This is the
@@ -190,7 +195,13 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   const decoder = new prism.opus.Decoder({ rate: 48000, channels: 1, frameSize: 960 });
   const pcmStream = opusStream.pipe(decoder);
 
-  const dgSocket = new WebSocket(DEEPGRAM_URL, { headers: { Authorization: `Token ${DEEPGRAM_API_KEY}` } });
+  // handshakeTimeout guards against a stalled (not outright refused) TCP/TLS handshake,
+  // which would otherwise never emit 'open', 'error', or 'close' - leaking this entry
+  // and permanently blocking this user from getting captions again.
+  const dgSocket = new WebSocket(DEEPGRAM_URL, {
+    headers: { Authorization: `Token ${DEEPGRAM_API_KEY}` },
+    handshakeTimeout: 10_000,
+  });
   let dgOpen = false;
   let buffered = [];
   let speaker;
@@ -198,8 +209,13 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   let stopPadding = () => {};
 
   // Identity, not just key, so a stale pipeline's error/close can't delete a newer one's entry.
-  const entry = { opusStream, dgSocket };
+  const entry = { guildId, opusStream, dgSocket, decoder };
   activeStreams.set(key, entry);
+
+  const releaseEntry = () => {
+    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    windingDownStreams.delete(entry);
+  };
 
   dgSocket.on('open', () => {
     dgOpen = true;
@@ -245,14 +261,25 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     });
   });
 
+  // Destroying opusStream/decoder here too (not just releasing the activeStreams entry)
+  // matters if Deepgram drops the connection mid-utterance, while the user is still
+  // talking: without this, a later speech resumption re-subscribes to @discordjs/voice
+  // for a userId whose old, still-live opusStream it hands back unchanged (per its
+  // dedup-by-userId behavior), stacking a second full set of listeners and a second
+  // decoder onto the same stream - a zombie pipeline that keeps decoding and sending to
+  // the already-dead socket indefinitely.
   dgSocket.on('error', (err) => {
     console.error(`[${userId}] Deepgram error:`, err);
     stopPadding();
-    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    releaseEntry();
+    opusStream.destroy();
+    decoder.destroy();
   });
   dgSocket.on('close', () => {
     stopPadding();
-    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    releaseEntry();
+    opusStream.destroy();
+    decoder.destroy();
   });
 
   // Opus streams have no 'error' listener by default - Node throws and kills
@@ -267,14 +294,14 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   opusStream.on('error', (err) => {
     console.error(`[${userId}] Opus receive error:`, err);
     stopPadding();
-    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    releaseEntry();
     dgSocket.close();
     decoder.destroy();
   });
   decoder.on('error', (err) => {
     console.error(`[${userId}] Opus decode error:`, err);
     stopPadding();
-    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    releaseEntry();
     dgSocket.close();
     opusStream.destroy();
   });
@@ -300,6 +327,16 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   };
 
   opusStream.once('end', () => {
+    // Free this user's slot immediately, before padding even starts - otherwise, since
+    // the activeStreams entry isn't cleared until dgSocket eventually closes (up to 6s
+    // later), a user resuming speech during that window hits the activeStreams.has(key)
+    // guard above and their new speech is silently dropped: @discordjs/voice itself
+    // would happily hand back a fresh subscription, but startTranscribing never gets
+    // the chance to call it. Moved into windingDownStreams (not just dropped) so
+    // /disco leave can still find and tear this connection down while it finishes.
+    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    windingDownStreams.add(entry);
+
     // For a very short utterance, the Deepgram handshake may not have finished yet -
     // `buffered` (see the pcmStream 'data' handler above) already holds the entire
     // utterance's audio in that case, and the existing 'open' handler above flushes it
@@ -314,7 +351,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   } catch (err) {
     // Release the reservation on failure (e.g. the user left the guild before this
     // resolved) so a later speaking event for this user isn't silently no-op'd forever.
-    if (activeStreams.get(key) === entry) activeStreams.delete(key);
+    releaseEntry();
     stopPadding();
     opusStream.destroy();
     decoder.destroy();
@@ -327,8 +364,19 @@ function stopTranscribing(guildId) {
   for (const [key, streams] of activeStreams) {
     if (key.startsWith(`${guildId}:`)) {
       streams?.opusStream.destroy();
+      streams?.decoder?.destroy();
       streams?.dgSocket.close();
       activeStreams.delete(key);
+    }
+  }
+  // Pipelines already past opusStream 'end' live here instead, mid-padding - still
+  // need tearing down on /disco leave rather than left to finish their own 6s cap.
+  for (const entry of windingDownStreams) {
+    if (entry.guildId === guildId) {
+      entry.opusStream.destroy();
+      entry.decoder.destroy();
+      entry.dgSocket.close();
+      windingDownStreams.delete(entry);
     }
   }
 }
@@ -379,6 +427,17 @@ async function handleCaptionsStart(interaction) {
       channelId: channel.id,
       guildId,
       adapterCreator: channel.guild.voiceAdapterCreator,
+    });
+
+    // VoiceConnection emits its own 'error' on networking failures, separate from the
+    // discord.js Client's 'error' event handled above - left unlistened, Node's default
+    // behavior throws on an unhandled 'error' event. Even with a process-level backstop
+    // preventing a full crash, this guild's session would otherwise never get cleaned
+    // up (streams, listeners, sessionRegistry entry), leaving it zombied until someone
+    // manually runs /disco leave.
+    connection.on('error', (err) => {
+      console.error(`[${guildId}] Voice connection error:`, err);
+      stopCaptions(guildId);
     });
 
     await entersState(connection, VoiceConnectionStatus.Ready, 10_000);
