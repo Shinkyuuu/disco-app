@@ -30,6 +30,6 @@ jobs:
           base=$(node -p "require('./package.json').version")
           npm version "${base}-beta.${{ github.run_number }}" --no-git-tag-version --allow-same-version
       - run: npm run build
-      - run: npx electron-builder --win --publish always -c.publish.channel=beta
+      - run: npx electron-builder --win --publish always --config.publish.channel=beta
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
