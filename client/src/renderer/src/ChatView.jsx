@@ -10,12 +10,12 @@ import { mergeEntries } from './mergeEntries';
 // menuSections mirrors which items the ⋯ menu's popup should include (see
 // WindowMenu/ChatMenuView) - only the normal, non-error render below passes
 // any; the error-state renders further down pass none, leaving just Exit.
-function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, panelStyle, menuSections, children }) {
+function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
       <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>{header}</div>
       <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
-        <WindowMenu sections={menuSections} />
+        <WindowMenu sections={menuSections} locked={locked} />
         {!collapsed && children}
       </div>
     </div>
@@ -100,10 +100,16 @@ export default function ChatView() {
 
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
+  // Threaded through even on these error/reconnecting screens: the chat
+  // window can still be locked (and thus click-through at the OS level -
+  // see index.js) while disconnected, and the ⋯ button is the only way to
+  // reach "Unlock window" - without this, hovering it wouldn't carve out its
+  // click-through exception and the button would become unreachable.
+  const locked = settings?.chatLocked ?? false;
 
   if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
     return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
         <p>You need to be in the voice channel being captioned.</p>
         <button onClick={() => window.api.startChatWindow()}>Retry</button>
       </ChatFrame>
@@ -111,7 +117,7 @@ export default function ChatView() {
   }
   if (connectionState.status === 'auth-failed') {
     return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
         <p>Your session expired - please log in again.</p>
         <button disabled={!settings} onClick={() => settings && window.api.openLogin(settings.serverAddress)}>
           Log in
@@ -121,7 +127,7 @@ export default function ChatView() {
   }
   if (connectionState.status === 'unreachable') {
     return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
         <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
         <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
       </ChatFrame>
@@ -129,7 +135,7 @@ export default function ChatView() {
   }
   if (connectionState.status === 'reconnecting') {
     return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} panelClass="chat-panel--message">
+      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
         <p>Reconnecting…</p>
       </ChatFrame>
     );
@@ -149,6 +155,7 @@ export default function ChatView() {
       avatarSize={avatarSize}
       avatarMode={avatarMode}
       collapsed={chatCollapsed}
+      locked={locked}
       menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true, autoWidth: true }}
       panelStyle={{
         backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,

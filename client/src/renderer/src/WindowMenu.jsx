@@ -9,7 +9,12 @@ import { useRef } from 'react';
 // window itself just to show it. `sections` mirrors which optional items the
 // popup should include (only the chat window's normal, non-error render
 // passes any - error screens pass none, leaving just Exit).
-export default function WindowMenu({ sections = {} }) {
+//
+// While the chat window is locked it's click-through (see index.js's
+// chatLocked handling), so this button is the only way back to "Unlock
+// window" - hovering it carves out a clickable exception via
+// setIgnoreMouseEvents, un-ignoring on enter and re-ignoring on leave.
+export default function WindowMenu({ sections = {}, locked = false }) {
   const buttonRef = useRef(null);
 
   function handleClick() {
@@ -25,7 +30,13 @@ export default function WindowMenu({ sections = {} }) {
 
   return (
     <div className="window-menu">
-      <button ref={buttonRef} aria-label="Window menu" onClick={handleClick}>
+      <button
+        ref={buttonRef}
+        aria-label="Window menu"
+        onClick={handleClick}
+        onMouseEnter={() => locked && window.api.setIgnoreMouseEvents(false)}
+        onMouseLeave={() => locked && window.api.setIgnoreMouseEvents(true)}
+      >
         ⋯
       </button>
     </div>

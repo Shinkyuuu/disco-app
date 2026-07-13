@@ -322,6 +322,11 @@ function createChatWindow() {
   // popup, leaving the popup rendered behind chatWindow and unable to
   // receive the clicks/hovers meant for it.
   chatWindow.setAlwaysOnTop(true, 'screen-saver');
+  // While locked, the window is click-through so it doesn't block whatever's
+  // behind it - forward:true keeps mouse-move events flowing to the renderer
+  // so the ⋯ menu button (the only way back to "Unlock window") can still
+  // detect hover and un-ignore itself. See WindowMenu.jsx.
+  if (locked) chatWindow.setIgnoreMouseEvents(true, { forward: true });
   chatWindow.on('blur', () => {
     if (chatMenuWindow) return;
     if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -554,6 +559,7 @@ function registerIpcHandlers() {
     // setResizable() - see its comment for why.)
     if ('chatLocked' in sanitized && chatWindow) {
       chatWindow.setMovable(!sanitized.chatLocked);
+      chatWindow.setIgnoreMouseEvents(sanitized.chatLocked, { forward: true });
     }
     // getSettings is only read once, on mount, by every renderer - push every
     // change through so an already-open chat window (and its ⋯ menu popup,
@@ -655,6 +661,14 @@ function registerIpcHandlers() {
 
   ipcMain.handle('window-set-always-on-top', (_event, value) => {
     chatWindow?.setAlwaysOnTop(value, 'screen-saver');
+  });
+
+  // Called by the ⋯ menu button while the chat window is locked (and thus
+  // click-through) so hovering the button carves out a clickable exception -
+  // otherwise there'd be no way to reach "Unlock window" again. See
+  // WindowMenu.jsx.
+  ipcMain.handle('set-ignore-mouse-events', (_event, ignore) => {
+    chatWindow?.setIgnoreMouseEvents(ignore, { forward: true });
   });
 
   ipcMain.handle('close-chat-window', () => chatWindow?.close());
