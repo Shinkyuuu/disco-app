@@ -32,7 +32,7 @@ export { headerHeightFor };
 // wider rectangles than the round discord avatars, hence the separate table
 // (same distinction as HEADER_HEIGHT_BY_AVATAR_SIZE / _DISCORD above).
 export const AVATAR_WIDTH_BY_SIZE = { small: 96, medium: 146, large: 194 };
-export const AVATAR_WIDTH_BY_SIZE_DISCORD = { small: 81, medium: 113, large: 144 };
+export const AVATAR_WIDTH_BY_SIZE_DISCORD = { small: 73, medium: 102, large: 130 };
 // .speaker-strip's gap, per avatar size - see SpeakerStrip.css.
 export const AVATAR_GAP_BY_SIZE = { small: 8, medium: 10, large: 12 };
 // .chat-header's `padding: 0 16px` in app.css - the avatar row's horizontal

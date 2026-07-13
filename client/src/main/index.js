@@ -200,28 +200,41 @@ function stopProfilePolling() {
 }
 
 // Resizes an already-open chat window to match the current avatarSize/
-// chatCollapsed/chatAutoWidth settings. While collapsed, min/max height are
-// both locked to the thin-bar height so the window can't be drag-resized
-// taller than the CSS thin bar; while expanded, the normal min height is
-// restored and the max height is uncapped. Width works the same way, mirrored
-// onto the width axis: while auto-width is on, min/max width are both locked
-// to the roster-fitting width computed by chatWindowWidthFor so the user
-// can't drag-resize away from it (this is separate from - and applies even
-// when - chatLocked disables the window's movable/resizable flags entirely,
-// since setSize/setMinimumSize/setMaximumSize work regardless of those flags,
-// they only gate the user's own drag-resize). While auto-width is off, width
+// chatCollapsed/chatAutoWidth/chatLocked settings. While collapsed, min/max
+// height are both locked to the thin-bar height so the window can't be
+// drag-resized taller than the CSS thin bar; while expanded, the normal min
+// height is restored and the max height is uncapped. Width works the same
+// way, mirrored onto the width axis: while auto-width is on, min/max width
+// are both locked to the roster-fitting width computed by chatWindowWidthFor
+// so the user can't drag-resize away from it. While auto-width is off, width
 // comes from the window's own current size, not the persisted
 // chatWindowWidth - this can run right after the user finishes a drag-resize,
 // and the 'resized' listener's store write is not guaranteed to have landed
 // yet at that point.
+//
+// chatLocked freezes min=max=current size instead of calling
+// win.setResizable(false) - Electron 39 has a known Windows regression where
+// toggling setResizable() at runtime on a transparent, frameless window
+// desyncs the native resize-border cursor from the resize capability Chromium
+// actually enforces (still works, but shows the wrong/stale cursor). Pinning
+// min/max size achieves the same "can't drag-resize" effect without ever
+// calling setResizable() after construction.
 function applyChatWindowSize(win) {
   const avatarSize = store.get('avatarSize');
   const avatarMode = store.get('avatarMode');
   const collapsed = store.get('chatCollapsed');
   const autoWidth = store.get('chatAutoWidth');
+  const locked = store.get('chatLocked');
   const height = chatWindowHeightFor(avatarSize, { collapsed, avatarMode, panelHeight: store.get('chatWindowPanelHeight') });
   const [currentWidth] = win.getSize();
   const width = autoWidth ? chatWindowWidthFor(currentRoster.length, avatarSize, avatarMode) : currentWidth;
+
+  if (locked) {
+    win.setMinimumSize(width, height);
+    win.setMaximumSize(width, height);
+    win.setSize(width, height);
+    return;
+  }
 
   const minHeight = collapsed ? height : HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT;
   win.setMinimumSize(autoWidth ? width : 300, minHeight);
@@ -253,16 +266,24 @@ function createChatWindow() {
   chatWindow = new BrowserWindow({
     width,
     height,
-    ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
-    ...(collapsed
-      ? { minHeight: height, maxHeight: height }
-      : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
+    // While locked, min/max are both pinned to the current size instead of
+    // passing resizable: false - see applyChatWindowSize's comment for why
+    // (a runtime setResizable() toggle is what triggers the Electron 39
+    // Windows cursor bug, not the size constraints).
+    ...(locked
+      ? { minWidth: width, maxWidth: width, minHeight: height, maxHeight: height }
+      : {
+          ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
+          ...(collapsed
+            ? { minHeight: height, maxHeight: height }
+            : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
+        }),
     frame: false,
     icon: ICON_PATH,
     // Transparent so the header strip above the chat panel is invisible -
     // speaker avatars render there and appear to float above the window.
     transparent: true,
-    resizable: !locked,
+    resizable: true,
     movable: !locked,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
@@ -499,14 +520,15 @@ function registerIpcHandlers() {
     // Resize the already-open chat window immediately - otherwise a larger
     // avatar size, or a collapse/expand toggle, wouldn't take visual effect
     // (or would clip) until the next time the window happens to be recreated.
-    if (('avatarSize' in sanitized || 'avatarMode' in sanitized || 'chatCollapsed' in sanitized || 'chatAutoWidth' in sanitized) && chatWindow) {
+    if (('avatarSize' in sanitized || 'avatarMode' in sanitized || 'chatCollapsed' in sanitized || 'chatAutoWidth' in sanitized || 'chatLocked' in sanitized) && chatWindow) {
       applyChatWindowSize(chatWindow);
     }
-    // Same live-apply reasoning as above: movable/resizable are BrowserWindow
-    // properties, not CSS, so an open window needs them flipped directly.
+    // Same live-apply reasoning as above: movable is a BrowserWindow property,
+    // not CSS, so an open window needs it flipped directly. (Resizing is
+    // frozen via applyChatWindowSize's min=max pinning above, not
+    // setResizable() - see its comment for why.)
     if ('chatLocked' in sanitized && chatWindow) {
       chatWindow.setMovable(!sanitized.chatLocked);
-      chatWindow.setResizable(!sanitized.chatLocked);
     }
     // getSettings is only read once, on mount, by every renderer - push every
     // change through so an already-open chat window (and its ⋯ menu popup,
