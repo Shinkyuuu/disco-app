@@ -39,6 +39,13 @@ export const AVATAR_GAP_BY_SIZE = { small: 8, medium: 10, large: 12 };
 // breathing room the window width also has to include.
 const HEADER_HORIZONTAL_PADDING = 32;
 export const MIN_CHAT_WINDOW_WIDTH = 300;
+// The floating ⋯ menu button (.window-menu in app.css) is positioned
+// right:6px against the window's own right edge, independent of the avatar
+// strip - with the header's row packed flush against that same edge, the
+// button would otherwise sit directly on top of the last avatar's
+// muted/deafened status badge (.speaker-status-icon, which itself sticks out
+// past the avatar's edge). This reserves constant breathing room to its left.
+const MENU_BUTTON_CLEARANCE = 28;
 
 // Chat window width for the auto-width setting: exactly wide enough to fit
 // every avatar in the roster's single-row strip (see SpeakerStrip.jsx) side
@@ -51,5 +58,5 @@ export function chatWindowWidthFor(rosterSize, avatarSize, avatarMode) {
   const gap = AVATAR_GAP_BY_SIZE[avatarSize] ?? AVATAR_GAP_BY_SIZE.small;
   const n = Math.max(rosterSize, 0);
   const rowWidth = n * avatarWidth + Math.max(n - 1, 0) * gap;
-  return Math.max(rowWidth + HEADER_HORIZONTAL_PADDING, MIN_CHAT_WINDOW_WIDTH);
+  return Math.max(rowWidth + HEADER_HORIZONTAL_PADDING + MENU_BUTTON_CLEARANCE, MIN_CHAT_WINDOW_WIDTH);
 }
