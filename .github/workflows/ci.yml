@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-server:
+    runs-on: ubuntu-latest
+    # Not real secrets - auth.js requires SESSION_SECRET to be set at all (throws
+    # otherwise), and auth.test.js's buildAuthorizeUrl test compares against
+    # DISCORD_APPLICATION_ID's actual value, so both need *some* value present.
+    # These tests never call Discord's real API - any placeholder string works.
+    env:
+      SESSION_SECRET: ci-test-secret-not-a-real-secret
+      DISCORD_APPLICATION_ID: ci-test-application-id
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  test-client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm test

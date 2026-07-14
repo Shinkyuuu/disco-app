@@ -550,6 +550,7 @@ function registerIpcHandlers() {
     chatAutoWidth: store.get('chatAutoWidth'),
     chatFontFamily: store.get('chatFontFamily'),
     chatBorderStyle: store.get('chatBorderStyle'),
+    betaUpdates: store.get('betaUpdates'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
     appVersion: app.getVersion(),
@@ -779,6 +780,10 @@ function transitionToLauncher() {
 }
 
 function setupAutoUpdater() {
+  const betaUpdates = store.get('betaUpdates');
+  autoUpdater.allowPrerelease = betaUpdates;
+  autoUpdater.channel = betaUpdates ? 'beta' : null;
+
   autoUpdater.on('update-not-available', () => {
     transitionToLauncher();
   });

@@ -45,3 +45,7 @@ test('returns an empty object when nothing is allowlisted', () => {
 test('serverAddress is not allowlisted (it is set via the SERVER_ADDRESS env var, not the renderer)', () => {
   assert.deepEqual(sanitizeSettingsPatch({ serverAddress: 'my.server.com' }), {});
 });
+
+test('betaUpdates is allowlisted', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ betaUpdates: true }), { betaUpdates: true });
+});
