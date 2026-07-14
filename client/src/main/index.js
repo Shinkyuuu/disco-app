@@ -31,7 +31,6 @@ import {
   MIN_CHAT_PANEL_HEIGHT,
 } from './chatWindowSize.js';
 import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
-import { toastPositionFor, TOAST_WIDTH, TOAST_HEIGHT } from './toastPosition.js';
 import { createWsClient } from './wsClient.js';
 import { sanitizeSettingsPatch } from './settingsKeys.js';
 import { schemeFor } from './serverScheme.js';
@@ -84,17 +83,6 @@ let chatWindow = null;
 // inside chatWindow, so opening it never has to resize or move the chat
 // window itself (see createChatMenuWindow below).
 let chatMenuWindow = null;
-let toastWindow = null;
-let toastDismissedStatus = null;
-let toastCloseTimer = null;
-const TOAST_STATUSES = new Set(['auth-failed', 'unreachable', 'reconnecting', 'session-ended']);
-// A flapping connection can bounce back into a toast-worthy status within
-// moments of recovering - closing the toast window immediately on every
-// 'connected' would tear down and recreate the real OS BrowserWindow on
-// every cycle, and BrowserWindow.close() is async (toastWindow stays
-// non-null until 'closed' fires), which could otherwise make a recreation
-// attempt mid-close silently no-op. Debouncing the close sidesteps both.
-const TOAST_CLOSE_DELAY_MS = 1500;
 let pendingAuthToken = null;
 let pendingAuthError = null;
 let deferredOpenUrl = null;
@@ -123,39 +111,10 @@ let lastConnectionState = { status: 'connected' };
 function setConnectionState(state) {
   lastConnectionState = state;
   broadcastToRenderers('ws-connection-state', state);
-  if (toastWindow) toastWindow.webContents.send('ws-connection-state', state);
-  updateToast(state);
-}
-
-function updateToast(state) {
-  if (!TOAST_STATUSES.has(state.status)) {
-    toastDismissedStatus = null;
-    clearTimeout(toastCloseTimer);
-    toastCloseTimer = setTimeout(() => {
-      toastWindow?.close();
-    }, TOAST_CLOSE_DELAY_MS);
-    return;
-  }
-  // A toast-worthy state arrived - cancel any pending debounced close so a
-  // still-open (or about-to-close) window is kept/reused instead of being
-  // torn down out from under this new state.
-  clearTimeout(toastCloseTimer);
-  toastCloseTimer = null;
-  if (state.status === toastDismissedStatus) return;
-  if (!toastWindow || toastWindow.isDestroyed()) createToastWindow();
 }
 
 function startWsClient() {
   if (wsClient) return;
-  // A fresh attempt (initial launch, or a user-initiated Retry/Login/
-  // Reconnect click) supersedes any earlier dismissal - the user took an
-  // action, so whatever happens next deserves to be shown even if the same
-  // status was dismissed before. The automatic reconnect-with-backoff loop
-  // inside wsClient.js's own connect() never re-enters this function, so
-  // this reset only fires on a genuinely new attempt, not on every retry -
-  // without it, e.g. a dismissed auth-failed toast would stay silently
-  // suppressed if Retry immediately hits the same auth failure again.
-  toastDismissedStatus = null;
   const token = store.get('sessionToken');
   if (!token) {
     // A stale token gets deleted on auth-failure; surface that as the
@@ -489,42 +448,6 @@ function createChatMenuWindow(anchor, sections) {
   });
 }
 
-// The error toast - its own small always-on-top window (same reasoning as
-// chatMenuWindow above) so it's visible regardless of chatWindow's
-// collapsed/expanded state, and even if chatWindow is closed entirely while
-// wsClient keeps running in the background.
-function createToastWindow() {
-  const chatBounds = chatWindow ? chatWindow.getBounds() : null;
-  const workArea = chatWindow
-    ? screen.getDisplayMatching(chatBounds).workArea
-    : screen.getPrimaryDisplay().workArea;
-  const { x, y } = toastPositionFor(chatBounds, workArea);
-
-  toastWindow = new BrowserWindow({
-    x,
-    y,
-    width: TOAST_WIDTH,
-    height: TOAST_HEIGHT,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    show: false,
-    skipTaskbar: true,
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/index.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  toastWindow.setAlwaysOnTop(true, 'screen-saver');
-  toastWindow.once('ready-to-show', () => toastWindow?.showInactive());
-  toastWindow.loadURL(rendererUrl('toast'));
-  toastWindow.on('closed', () => {
-    toastWindow = null;
-  });
-}
-
 function menuSectionsQuery(sections) {
   return Object.entries(sections)
     .filter(([, enabled]) => enabled)
@@ -783,11 +706,6 @@ function registerIpcHandlers() {
   ipcMain.handle('close-chat-window', () => chatWindow?.close());
 
   ipcMain.handle('open-chat-menu', (_event, { anchor, sections }) => createChatMenuWindow(anchor, sections));
-
-  ipcMain.handle('dismiss-toast', () => {
-    toastDismissedStatus = lastConnectionState.status;
-    toastWindow?.close();
-  });
 }
 
 function rendererUrl(view) {

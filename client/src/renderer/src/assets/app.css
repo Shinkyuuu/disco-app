@@ -636,28 +636,6 @@ select {
   text-align: center;
 }
 
-.toast-root {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  background: #0d0e11;
-  border: 1px solid #ffffff;
-  border-radius: 8px;
-}
-
-.toast-root p {
-  margin: 0;
-  flex: 1;
-}
-
-.toast-close {
-  flex: none;
-  line-height: 1;
-}
-
 .message-log {
   flex: 1;
   min-height: 0;

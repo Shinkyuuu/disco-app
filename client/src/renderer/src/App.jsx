@@ -18,7 +18,6 @@ import LauncherView from './LauncherView';
 import ChatView from './ChatView';
 import ChatMenuView from './ChatMenuView';
 import UpdaterView from './UpdaterView';
-import ToastView from './ToastView';
 
 export default function App() {
   const params = new URLSearchParams(window.location.search);
@@ -26,6 +25,5 @@ export default function App() {
   if (view === 'chat') return <ChatView />;
   if (view === 'chat-menu') return <ChatMenuView params={params} />;
   if (view === 'updater') return <UpdaterView />;
-  if (view === 'toast') return <ToastView />;
   return <LauncherView />;
 }
