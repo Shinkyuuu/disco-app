@@ -46,7 +46,7 @@ jobs:
           sparse-checkout: |
             docker-compose.yml
           sparse-checkout-cone-mode: false
-      - shell: pwsh
+      - shell: powershell
         run: |
           docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
           docker compose pull
