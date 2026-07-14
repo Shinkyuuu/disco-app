@@ -27,6 +27,18 @@ import aboutContainerBackground from './assets/about_container_background.png';
 
 const AURORA_COLOR_STOPS = ['#3b82f6', '#7C3AED', '#3b82f6'];
 
+const OPEN_FAILURE_MESSAGES = {
+  'auth-failed': (state) => (state.code === 4001
+    ? 'You need to be in the voice channel being captioned.'
+    : 'Your session expired - please log in again.'),
+  unreachable: (state) => `Can't reach ${state.serverAddress} - the server isn't responding.`,
+  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
+};
+
+function describeOpenFailure(state) {
+  return OPEN_FAILURE_MESSAGES[state.status]?.(state) ?? "Couldn't open the chat window - try again.";
+}
+
 function ChatIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
@@ -101,6 +113,7 @@ export default function LauncherView() {
   const [loginError, setLoginError] = useState(null);
   const [profileState, setProfileState] = useState({ reachable: true, profile: null });
   const [ownAppearance, setOwnAppearance] = useState(null);
+  const [chatOpenState, setChatOpenState] = useState({ loading: false, error: null });
 
   function reloadOwnAppearance(userId) {
     if (!userId) return;
@@ -156,6 +169,16 @@ export default function LauncherView() {
     );
   }
 
+  async function handleStartChatWindow() {
+    setChatOpenState({ loading: true, error: null });
+    const result = await window.api.startChatWindow();
+    if (!result.opened) {
+      setChatOpenState({ loading: false, error: result.state });
+    }
+    // On success the launcher is hidden by createChatWindow() in the main
+    // process - no further state update needed here.
+  }
+
   // Optimistic local settings update; `persist` also writes through to the store.
   function handleSettingsChange(partial, persist) {
     setSettings((s) => ({ ...s, ...partial }));
@@ -206,15 +229,21 @@ export default function LauncherView() {
                     <button onClick={handleLogin}>Retry</button>
                   </div>
                 )}
+                {chatOpenState.error && (
+                  <div role="alert">
+                    <p>{describeOpenFailure(chatOpenState.error)}</p>
+                    <button onClick={() => setChatOpenState({ loading: false, error: null })}>Dismiss</button>
+                  </div>
+                )}
                 {settings.hasSessionToken ? (
                   <>
                     <p className="launcher-kicker">Welcome back</p>
                     <ProfileHeader profile={profileState.profile} reachable={profileState.reachable} />
                     <div className="launcher-divider" />
                     <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
-                      <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
+                      <button className="launcher-primary-btn" disabled={chatOpenState.loading} onClick={handleStartChatWindow}>
                         <ChatIcon />
-                        Start Chat Window
+                        {chatOpenState.loading ? 'Opening…' : 'Start Chat Window'}
                       </button>
                     </BorderGlow>
                     <div className="launcher-button-row">
