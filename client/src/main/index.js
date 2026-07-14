@@ -123,9 +123,10 @@ function startWsClient() {
     return;
   }
 
-  wsClient = createWsClient({ serverAddress: SERVER_ADDRESS, token });
+  const client = createWsClient({ serverAddress: SERVER_ADDRESS, token });
+  wsClient = client;
 
-  wsClient.on('roster', (members) => {
+  client.on('roster', (members) => {
     currentRoster = members;
     broadcastToRenderers('roster', members);
     // Auto-width fits the window to exactly the current roster's avatars -
@@ -133,8 +134,8 @@ function startWsClient() {
     // waiting for the next settings change or window reopen.
     if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
   });
-  wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
-  wsClient.on('transcript', (event) => {
+  client.on('speaking', (event) => broadcastToRenderers('speaking', event));
+  client.on('transcript', (event) => {
     // receivedAt drives the renderer's 5-second disappearing-chat timer -
     // stamped once here so live push and a later state-snapshot pull agree
     // on the same value (not a fresh Date.now() each time it's read).
@@ -148,22 +149,31 @@ function startWsClient() {
     if (messageLog.length > 1000) messageLog.shift();
     broadcastToRenderers('transcript', finalized);
   });
-  wsClient.on('open', () => {
+  client.on('open', () => {
     consecutiveFailures = 0;
     setConnectionState({ status: 'connected' });
   });
-  wsClient.on('auth-failed', (reason, code) => {
+  client.on('auth-failed', (reason, code) => {
     setConnectionState({ status: 'auth-failed', reason, code });
-    wsClient.close();
+    client.close();
     wsClient = null;
     if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
   });
-  wsClient.on('session-ended', () => {
+  client.on('session-ended', () => {
     setConnectionState({ status: 'session-ended' });
-    wsClient.close();
+    client.close();
     wsClient = null;
   });
-  wsClient.on('close', (code, reason) => {
+  client.on('close', (code, reason) => {
+    // wsClient.js emits 'close' unconditionally, even for a caller-initiated
+    // close (the auth-failed/session-ended handlers above) - only the
+    // reconnect timer is suppressed by closedByCaller there, not this event.
+    // Without this guard, that late close event would silently overwrite the
+    // terminal state those handlers just set with a spurious reconnecting/
+    // unreachable status. Comparing identity (not just wsClient's truthiness)
+    // also correctly ignores a stale event from this now-dead client after
+    // wsClient has since been reassigned to a newer instance.
+    if (wsClient !== client) return;
     consecutiveFailures += 1;
     const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
     setConnectionState({ status, code, reason, serverAddress: SERVER_ADDRESS });
