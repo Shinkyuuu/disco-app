@@ -514,6 +514,7 @@ function stopCaptions(guildId) {
   if (!connection) return;
 
   stopTranscribing(guildId);
+  broadcastToSession(guildId, { type: 'session-ended' });
   const session = endSession(guildId);
   if (session?.voiceStateListener) {
     client.off(Events.VoiceStateUpdate, session.voiceStateListener);
