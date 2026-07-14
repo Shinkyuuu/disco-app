@@ -253,8 +253,14 @@ function startWsClient() {
 const TERMINAL_CLOSE_DELAY_MS = 8000;
 
 function scheduleChatWindowClose() {
+  // Snapshot the specific window instance rather than closing over the
+  // mutable chatWindow binding - a manual close-then-reopen within the delay
+  // window would otherwise leave this timer pointed at whatever chatWindow
+  // happens to be 8 seconds from now (a different, healthy window), closing
+  // it out from under the user instead of the one this was scheduled for.
+  const target = chatWindow;
   setTimeout(() => {
-    chatWindow?.close();
+    if (chatWindow === target) chatWindow?.close();
   }, TERMINAL_CLOSE_DELAY_MS);
 }
 
