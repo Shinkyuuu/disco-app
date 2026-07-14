@@ -722,14 +722,6 @@ select {
   border: none;
 }
 
-.chat-panel--message {
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  padding: 16px;
-  text-align: center;
-}
-
 .message-log {
   flex: 1;
   min-height: 0;

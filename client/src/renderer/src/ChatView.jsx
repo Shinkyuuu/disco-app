@@ -135,11 +135,7 @@ export default function ChatView() {
   // OS dialog and closes shortly after - see client/src/main/index.js.
   const statusBanner =
     connectionState.status === 'unreachable'
-      ? {
-          message: `Can't reach ${connectionState.serverAddress} - still retrying in the background.`,
-          actionLabel: 'Edit server address in Settings',
-          onAction: () => window.api.focusLauncherSettings(),
-        }
+      ? { message: `Can't reach ${connectionState.serverAddress} - still retrying in the background.` }
       : connectionState.status === 'reconnecting'
         ? { message: 'Reconnecting…' }
         : null;
