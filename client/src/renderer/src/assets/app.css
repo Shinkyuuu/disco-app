@@ -628,10 +628,12 @@ select {
 }
 
 /* Slides up from below the header's own bottom edge into view, in front of
-   the avatars - overflow:hidden on .chat-header above is what keeps it
-   invisible for the part of the entrance animation still below that edge, no
-   separate hidden state needed since ChatView only mounts this element while
-   reconnecting/unreachable (see ChatStatusBanner). */
+   the avatars, and slides back down on exit - overflow:hidden on
+   .chat-header above is what keeps translateY(100%) invisible rather than a
+   separate hidden state. Rest state (this rule) is off-screen below; adding
+   --visible (see below) is what ChatStatusBanner toggles to animate either
+   direction - transition-duration here must stay in sync with
+   EXIT_DURATION_MS in ChatStatusBanner.jsx. */
 .chat-status-banner {
   position: absolute;
   bottom: 0;
@@ -646,7 +648,12 @@ select {
   background: #c0293f;
   color: #ffffff;
   -webkit-app-region: no-drag;
-  animation: chat-status-banner-slide-up 0.25s ease-out;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out;
+}
+
+.chat-status-banner--visible {
+  transform: translateY(0);
 }
 
 .chat-status-banner p {
@@ -662,15 +669,6 @@ select {
 
 .chat-status-banner button:hover {
   background: rgba(255, 255, 255, 0.28);
-}
-
-@keyframes chat-status-banner-slide-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
 }
 
 .chat-header--small {

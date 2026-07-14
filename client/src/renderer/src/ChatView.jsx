@@ -175,7 +175,7 @@ export default function ChatView() {
           profileBySpeaker={profileBySpeaker}
         />
       }
-      headerOverlay={statusBanner && <ChatStatusBanner key={connectionState.status} {...statusBanner} />}
+      headerOverlay={<ChatStatusBanner banner={statusBanner} />}
     >
       <MessageLog entries={entries} colorBySpeaker={colorBySpeaker} chatSize={chatSize} />
     </ChatFrame>
