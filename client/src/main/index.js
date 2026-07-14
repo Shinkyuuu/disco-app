@@ -86,7 +86,15 @@ let chatWindow = null;
 let chatMenuWindow = null;
 let toastWindow = null;
 let toastDismissedStatus = null;
+let toastCloseTimer = null;
 const TOAST_STATUSES = new Set(['auth-failed', 'unreachable', 'reconnecting', 'session-ended']);
+// A flapping connection can bounce back into a toast-worthy status within
+// moments of recovering - closing the toast window immediately on every
+// 'connected' would tear down and recreate the real OS BrowserWindow on
+// every cycle, and BrowserWindow.close() is async (toastWindow stays
+// non-null until 'closed' fires), which could otherwise make a recreation
+// attempt mid-close silently no-op. Debouncing the close sidesteps both.
+const TOAST_CLOSE_DELAY_MS = 1500;
 let pendingAuthToken = null;
 let pendingAuthError = null;
 let deferredOpenUrl = null;
@@ -122,15 +130,32 @@ function setConnectionState(state) {
 function updateToast(state) {
   if (!TOAST_STATUSES.has(state.status)) {
     toastDismissedStatus = null;
-    toastWindow?.close();
+    clearTimeout(toastCloseTimer);
+    toastCloseTimer = setTimeout(() => {
+      toastWindow?.close();
+    }, TOAST_CLOSE_DELAY_MS);
     return;
   }
+  // A toast-worthy state arrived - cancel any pending debounced close so a
+  // still-open (or about-to-close) window is kept/reused instead of being
+  // torn down out from under this new state.
+  clearTimeout(toastCloseTimer);
+  toastCloseTimer = null;
   if (state.status === toastDismissedStatus) return;
-  if (!toastWindow) createToastWindow();
+  if (!toastWindow || toastWindow.isDestroyed()) createToastWindow();
 }
 
 function startWsClient() {
   if (wsClient) return;
+  // A fresh attempt (initial launch, or a user-initiated Retry/Login/
+  // Reconnect click) supersedes any earlier dismissal - the user took an
+  // action, so whatever happens next deserves to be shown even if the same
+  // status was dismissed before. The automatic reconnect-with-backoff loop
+  // inside wsClient.js's own connect() never re-enters this function, so
+  // this reset only fires on a genuinely new attempt, not on every retry -
+  // without it, e.g. a dismissed auth-failed toast would stay silently
+  // suppressed if Retry immediately hits the same auth failure again.
+  toastDismissedStatus = null;
   const token = store.get('sessionToken');
   if (!token) {
     // A stale token gets deleted on auth-failure; surface that as the
