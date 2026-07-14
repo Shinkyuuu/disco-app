@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('api', {
   setIgnoreMouseEvents: (ignore) => ipcRenderer.invoke('set-ignore-mouse-events', ignore),
   closeChatWindow: () => ipcRenderer.invoke('close-chat-window'),
   openChatMenu: (anchor, sections) => ipcRenderer.invoke('open-chat-menu', { anchor, sections }),
+  dismissToast: () => ipcRenderer.invoke('dismiss-toast'),
   getProfile: () => ipcRenderer.invoke('get-profile'),
   onProfile: subscribe('profile', (callback) => (_e, result) => callback(result)),
   onUpdaterStatus: subscribe('updater-status', (callback) => (_e, status) => callback(status)),
