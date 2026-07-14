@@ -9,3 +9,4 @@ recordings/
 .env
 .env.example
 *.md
+!client/resources/icon.png
