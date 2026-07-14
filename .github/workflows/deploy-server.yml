@@ -7,6 +7,7 @@ on:
       - 'client/**'
       - 'docs/**'
       - '**/*.md'
+  workflow_dispatch: {}
 
 concurrency:
   group: deploy-server
