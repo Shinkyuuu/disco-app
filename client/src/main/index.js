@@ -115,7 +115,11 @@ function setConnectionState(state) {
 }
 
 function startWsClient() {
-  if (wsClient) return pendingOpenAttempt ?? Promise.resolve({ ok: lastConnectionState.status === 'connected' });
+  if (wsClient) {
+    return pendingOpenAttempt ?? Promise.resolve(
+      lastConnectionState.status === 'connected' ? { ok: true } : { ok: false, state: lastConnectionState },
+    );
+  }
 
   const token = store.get('sessionToken');
   if (!token) {
