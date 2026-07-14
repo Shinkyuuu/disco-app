@@ -126,7 +126,6 @@ export default function ChatView() {
   if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>You need to be in the voice channel being captioned.</p>
         <button onClick={() => window.api.startChatWindow()}>Retry</button>
       </ChatFrame>
     );
@@ -134,7 +133,6 @@ export default function ChatView() {
   if (connectionState.status === 'auth-failed') {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Your session expired - please log in again.</p>
         <button disabled={!settings} onClick={() => settings && window.api.openLogin(settings.serverAddress)}>
           Log in
         </button>
@@ -144,15 +142,14 @@ export default function ChatView() {
   if (connectionState.status === 'unreachable') {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
         <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
       </ChatFrame>
     );
   }
-  if (connectionState.status === 'reconnecting') {
+  if (connectionState.status === 'session-ended') {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Reconnecting…</p>
+        <button onClick={() => window.api.startChatWindow()}>Reconnect</button>
       </ChatFrame>
     );
   }
