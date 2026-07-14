@@ -158,6 +158,11 @@ function startWsClient() {
     wsClient = null;
     if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
   });
+  wsClient.on('session-ended', () => {
+    setConnectionState({ status: 'session-ended' });
+    wsClient.close();
+    wsClient = null;
+  });
   wsClient.on('close', (code, reason) => {
     consecutiveFailures += 1;
     const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
