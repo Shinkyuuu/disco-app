@@ -1,0 +1,11 @@
+node_modules
+client/
+docs/
+recordings/
+.git
+.github
+.claude
+.superpowers
+.env
+.env.example
+*.md

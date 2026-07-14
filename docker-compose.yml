@@ -1,0 +1,9 @@
+services:
+  disco-server:
+    image: ghcr.io/shinkyuuu/disco-app:latest
+    container_name: disco-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
