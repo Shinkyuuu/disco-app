@@ -31,6 +31,7 @@ import {
   MIN_CHAT_PANEL_HEIGHT,
 } from './chatWindowSize.js';
 import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
+import { toastPositionFor, TOAST_WIDTH, TOAST_HEIGHT } from './toastPosition.js';
 import { createWsClient } from './wsClient.js';
 import { sanitizeSettingsPatch } from './settingsKeys.js';
 import { schemeFor } from './serverScheme.js';
@@ -83,6 +84,9 @@ let chatWindow = null;
 // inside chatWindow, so opening it never has to resize or move the chat
 // window itself (see createChatMenuWindow below).
 let chatMenuWindow = null;
+let toastWindow = null;
+let toastDismissedStatus = null;
+const TOAST_STATUSES = new Set(['auth-failed', 'unreachable', 'reconnecting', 'session-ended']);
 let pendingAuthToken = null;
 let pendingAuthError = null;
 let deferredOpenUrl = null;
@@ -111,6 +115,18 @@ let lastConnectionState = { status: 'connected' };
 function setConnectionState(state) {
   lastConnectionState = state;
   broadcastToRenderers('ws-connection-state', state);
+  if (toastWindow) toastWindow.webContents.send('ws-connection-state', state);
+  updateToast(state);
+}
+
+function updateToast(state) {
+  if (!TOAST_STATUSES.has(state.status)) {
+    toastDismissedStatus = null;
+    toastWindow?.close();
+    return;
+  }
+  if (state.status === toastDismissedStatus) return;
+  if (!toastWindow) createToastWindow();
 }
 
 function startWsClient() {
@@ -448,6 +464,42 @@ function createChatMenuWindow(anchor, sections) {
   });
 }
 
+// The error toast - its own small always-on-top window (same reasoning as
+// chatMenuWindow above) so it's visible regardless of chatWindow's
+// collapsed/expanded state, and even if chatWindow is closed entirely while
+// wsClient keeps running in the background.
+function createToastWindow() {
+  const chatBounds = chatWindow ? chatWindow.getBounds() : null;
+  const workArea = chatWindow
+    ? screen.getDisplayMatching(chatBounds).workArea
+    : screen.getPrimaryDisplay().workArea;
+  const { x, y } = toastPositionFor(chatBounds, workArea);
+
+  toastWindow = new BrowserWindow({
+    x,
+    y,
+    width: TOAST_WIDTH,
+    height: TOAST_HEIGHT,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  toastWindow.setAlwaysOnTop(true, 'screen-saver');
+  toastWindow.once('ready-to-show', () => toastWindow?.show());
+  toastWindow.loadURL(rendererUrl('toast'));
+  toastWindow.on('closed', () => {
+    toastWindow = null;
+  });
+}
+
 function menuSectionsQuery(sections) {
   return Object.entries(sections)
     .filter(([, enabled]) => enabled)
@@ -706,6 +758,11 @@ function registerIpcHandlers() {
   ipcMain.handle('close-chat-window', () => chatWindow?.close());
 
   ipcMain.handle('open-chat-menu', (_event, { anchor, sections }) => createChatMenuWindow(anchor, sections));
+
+  ipcMain.handle('dismiss-toast', () => {
+    toastDismissedStatus = lastConnectionState.status;
+    toastWindow?.close();
+  });
 }
 
 function rendererUrl(view) {
