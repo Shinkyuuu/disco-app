@@ -614,6 +614,7 @@ select {
    window itself is resized to fit, or larger avatars get clipped by the
    window's bounds (CSS overflow has no effect on that clipping). */
 .chat-header {
+  position: relative; /* anchors .chat-status-banner below */
   flex: none;
   display: flex;
   align-items: flex-end;
@@ -624,6 +625,52 @@ select {
   padding: 0 16px 0 28px;
   overflow: hidden;
   -webkit-app-region: drag;
+}
+
+/* Slides up from below the header's own bottom edge into view, in front of
+   the avatars - overflow:hidden on .chat-header above is what keeps it
+   invisible for the part of the entrance animation still below that edge, no
+   separate hidden state needed since ChatView only mounts this element while
+   reconnecting/unreachable (see ChatStatusBanner). */
+.chat-status-banner {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #c0293f;
+  color: #ffffff;
+  -webkit-app-region: no-drag;
+  animation: chat-status-banner-slide-up 0.25s ease-out;
+}
+
+.chat-status-banner p {
+  margin: 0;
+  flex: 1;
+}
+
+.chat-status-banner button {
+  flex: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.chat-status-banner button:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+@keyframes chat-status-banner-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .chat-header--small {

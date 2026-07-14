@@ -18,18 +18,22 @@ import { useEffect, useRef, useState } from 'react';
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog, { MESSAGE_VISIBLE_MS, MESSAGE_FADE_MS } from './MessageLog';
 import WindowMenu from './WindowMenu';
+import ChatStatusBanner from './ChatStatusBanner';
 import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
 import { mergeEntries } from './mergeEntries';
 
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
-// menuSections mirrors which items the ⋯ menu's popup should include (see
-// WindowMenu/ChatMenuView) - only the normal, non-error render below passes
-// any; the error-state renders further down pass none, leaving just Exit.
-function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
+// headerOverlay is the reconnecting/unreachable status banner (see
+// ChatStatusBanner) - rendered inside the header itself so it can slide up
+// in front of the avatars, visible even while the panel below is collapsed.
+function ChatFrame({ header = null, headerOverlay = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
-      <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>{header}</div>
+      <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>
+        {header}
+        {headerOverlay}
+      </div>
       <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
         <WindowMenu sections={menuSections} locked={locked} />
         {!collapsed && children}
@@ -116,28 +120,29 @@ export default function ChatView() {
 
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
-  // Threaded through even on these error screens: the chat window can still
-  // be locked (and thus click-through at the OS level - see index.js) while
-  // disconnected, and the ⋯ button is the only way to reach "Unlock window" -
-  // without this, hovering it wouldn't carve out its click-through exception
-  // and the button would become unreachable.
+  // Threaded through even while reconnecting/unreachable: the chat window can
+  // still be locked (and thus click-through at the OS level - see index.js)
+  // while disconnected, and the ⋯ button is the only way to reach "Unlock
+  // window" - without this, hovering it wouldn't carve out its click-through
+  // exception and the button would become unreachable.
   const locked = settings?.chatLocked ?? false;
 
-  if (connectionState.status === 'unreachable') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
-        <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
-      </ChatFrame>
-    );
-  }
-  if (connectionState.status === 'reconnecting') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Reconnecting…</p>
-      </ChatFrame>
-    );
-  }
+  // Reconnecting/unreachable no longer replace the whole view - they slide up
+  // as a banner in front of the avatars (see ChatFrame's headerOverlay),
+  // while roster/captions keep rendering normally underneath. auth-failed and
+  // session-ended aren't handled here at all: under the current design the
+  // chat window either never opens (blocked before creation) or gets a native
+  // OS dialog and closes shortly after - see client/src/main/index.js.
+  const statusBanner =
+    connectionState.status === 'unreachable'
+      ? {
+          message: `Can't reach ${connectionState.serverAddress} - still retrying in the background.`,
+          actionLabel: 'Edit server address in Settings',
+          onAction: () => window.api.focusLauncherSettings(),
+        }
+      : connectionState.status === 'reconnecting'
+        ? { message: 'Reconnecting…' }
+        : null;
 
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
@@ -170,6 +175,7 @@ export default function ChatView() {
           profileBySpeaker={profileBySpeaker}
         />
       }
+      headerOverlay={statusBanner && <ChatStatusBanner key={connectionState.status} {...statusBanner} />}
     >
       <MessageLog entries={entries} colorBySpeaker={colorBySpeaker} chatSize={chatSize} />
     </ChatFrame>
