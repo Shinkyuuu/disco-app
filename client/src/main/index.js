@@ -15,7 +15,7 @@
  */
 
 import 'dotenv/config';
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
@@ -88,6 +88,7 @@ let pendingAuthError = null;
 let deferredOpenUrl = null;
 
 let wsClient = null;
+let pendingOpenAttempt = null; // the in-flight connection's first-outcome promise, or null once settled
 const PROFILE_POLL_INTERVAL_MS = 5000;
 let profilePollTimer = null;
 let currentRoster = [];
@@ -114,70 +115,133 @@ function setConnectionState(state) {
 }
 
 function startWsClient() {
-  if (wsClient) return;
+  if (wsClient) return pendingOpenAttempt ?? Promise.resolve({ ok: lastConnectionState.status === 'connected' });
+
   const token = store.get('sessionToken');
   if (!token) {
     // A stale token gets deleted on auth-failure; surface that as the
     // session-expired screen instead of silently opening a dead window.
-    setConnectionState({ status: 'auth-failed', reason: 'no session' });
-    return;
+    const state = { status: 'auth-failed', reason: 'no session' };
+    setConnectionState(state);
+    return Promise.resolve({ ok: false, state });
   }
 
   const client = createWsClient({ serverAddress: SERVER_ADDRESS, token });
   wsClient = client;
 
-  client.on('roster', (members) => {
-    currentRoster = members;
-    broadcastToRenderers('roster', members);
-    // Auto-width fits the window to exactly the current roster's avatars -
-    // a join/leave changes that fit, so re-apply immediately rather than
-    // waiting for the next settings change or window reopen.
-    if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+  let settled = false;
+  const attempt = new Promise((resolve) => {
+    // Resolves once, on the connection's first outcome - success, a
+    // terminal failure, or escalation to unreachable. Before settling, a
+    // terminal failure means "the open attempt failed" (resolved with
+    // ok:false, for start-chat-window to turn into a launcher banner
+    // instead of ever creating the window). After settling, the exact same
+    // events instead mean "a live session just broke" (shown via a native
+    // dialog - see showTerminalErrorDialog). The persistent handlers below
+    // keep running for the connection's whole lifetime regardless of what
+    // this promise does.
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      pendingOpenAttempt = null;
+      resolve(result);
+    };
+
+    client.on('roster', (members) => {
+      currentRoster = members;
+      broadcastToRenderers('roster', members);
+      // Auto-width fits the window to exactly the current roster's avatars -
+      // a join/leave changes that fit, so re-apply immediately rather than
+      // waiting for the next settings change or window reopen.
+      if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+    });
+    client.on('speaking', (event) => broadcastToRenderers('speaking', event));
+    client.on('transcript', (event) => {
+      // receivedAt drives the renderer's 5-second disappearing-chat timer -
+      // stamped once here so live push and a later state-snapshot pull agree
+      // on the same value (not a fresh Date.now() each time it's read).
+      const finalized = { ...event, receivedAt: Date.now() };
+      messageLog.push(finalized);
+      // Bound the array a very long session's worth of finalized lines could otherwise grow
+      // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
+      // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
+      // 1000 lines is far more scrollback than this product's use case (a live
+      // conversation, not an archive) ever needs to show on reopen.
+      if (messageLog.length > 1000) messageLog.shift();
+      broadcastToRenderers('transcript', finalized);
+    });
+
+    client.on('open', () => {
+      consecutiveFailures = 0;
+      setConnectionState({ status: 'connected' });
+      settle({ ok: true });
+    });
+
+    client.on('auth-failed', (reason, code) => {
+      const state = { status: 'auth-failed', reason, code };
+      setConnectionState(state);
+      client.close();
+      wsClient = null;
+      if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
+      if (!settled) settle({ ok: false, state });
+      else showTerminalErrorDialog(state);
+    });
+
+    client.on('session-ended', () => {
+      const state = { status: 'session-ended' };
+      setConnectionState(state);
+      client.close();
+      wsClient = null;
+      // Structurally this can only fire after 'open' already settled the
+      // promise (it's a message over an authenticated connection) - the
+      // !settled branch is kept for uniformity with auth-failed rather than
+      // relying on that invariant silently.
+      if (!settled) settle({ ok: false, state });
+      else showTerminalErrorDialog(state);
+    });
+
+    client.on('close', (code, reason) => {
+      // wsClient.js emits 'close' unconditionally, even for a caller-initiated
+      // close (the auth-failed/session-ended handlers above) - only the
+      // reconnect timer is suppressed by closedByCaller there, not this event.
+      // Without this guard, that late close event would silently overwrite the
+      // terminal state those handlers just set with a spurious reconnecting/
+      // unreachable status. Comparing identity (not just wsClient's truthiness)
+      // also correctly ignores a stale event from this now-dead client after
+      // wsClient has since been reassigned to a newer instance.
+      if (wsClient !== client) return;
+      consecutiveFailures += 1;
+      const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
+      const state = { status, code, reason, serverAddress: SERVER_ADDRESS };
+      setConnectionState(state);
+      // unreachable blocks an in-flight open attempt, but once settled (the
+      // window is already open), both reconnecting and unreachable just
+      // update the inline chat screen - no dialog, no window action.
+      if (status === 'unreachable' && !settled) settle({ ok: false, state });
+    });
   });
-  client.on('speaking', (event) => broadcastToRenderers('speaking', event));
-  client.on('transcript', (event) => {
-    // receivedAt drives the renderer's 5-second disappearing-chat timer -
-    // stamped once here so live push and a later state-snapshot pull agree
-    // on the same value (not a fresh Date.now() each time it's read).
-    const finalized = { ...event, receivedAt: Date.now() };
-    messageLog.push(finalized);
-    // Bound the array a very long session's worth of finalized lines could otherwise grow
-    // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
-    // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
-    // 1000 lines is far more scrollback than this product's use case (a live
-    // conversation, not an archive) ever needs to show on reopen.
-    if (messageLog.length > 1000) messageLog.shift();
-    broadcastToRenderers('transcript', finalized);
-  });
-  client.on('open', () => {
-    consecutiveFailures = 0;
-    setConnectionState({ status: 'connected' });
-  });
-  client.on('auth-failed', (reason, code) => {
-    setConnectionState({ status: 'auth-failed', reason, code });
-    client.close();
-    wsClient = null;
-    if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
-  });
-  client.on('session-ended', () => {
-    setConnectionState({ status: 'session-ended' });
-    client.close();
-    wsClient = null;
-  });
-  client.on('close', (code, reason) => {
-    // wsClient.js emits 'close' unconditionally, even for a caller-initiated
-    // close (the auth-failed/session-ended handlers above) - only the
-    // reconnect timer is suppressed by closedByCaller there, not this event.
-    // Without this guard, that late close event would silently overwrite the
-    // terminal state those handlers just set with a spurious reconnecting/
-    // unreachable status. Comparing identity (not just wsClient's truthiness)
-    // also correctly ignores a stale event from this now-dead client after
-    // wsClient has since been reassigned to a newer instance.
-    if (wsClient !== client) return;
-    consecutiveFailures += 1;
-    const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
-    setConnectionState({ status, code, reason, serverAddress: SERVER_ADDRESS });
-  });
+
+  pendingOpenAttempt = attempt;
+  return attempt;
+}
+
+const TERMINAL_ERROR_MESSAGES = {
+  'auth-failed': (state) => (state.code === 4001
+    ? 'You need to be in the voice channel being captioned.'
+    : 'Your session expired - please log in again.'),
+  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
+};
+
+// Native OS dialog for a terminal error that broke an already-open, already-
+// working chat window - visible regardless of the window's collapsed/expanded
+// state without needing a second window (unlike the old standalone toast).
+// The chat window closes once the user dismisses it, since there's nothing
+// useful left to show (no live captions).
+function showTerminalErrorDialog(state) {
+  const message = TERMINAL_ERROR_MESSAGES[state.status]?.(state) ?? 'Something went wrong.';
+  const options = { type: 'error', title: 'Disco', message, buttons: ['OK'] };
+  const shown = chatWindow ? dialog.showMessageBox(chatWindow, options) : dialog.showMessageBox(options);
+  shown.then(() => { chatWindow?.close(); });
 }
 
 function handleProfileAuthFailure() {
@@ -604,9 +668,13 @@ function registerIpcHandlers() {
     if (chatMenuWindow) chatMenuWindow.webContents.send('settings-changed', sanitized);
   });
 
-  ipcMain.handle('start-chat-window', () => {
-    startWsClient();
-    createChatWindow();
+  ipcMain.handle('start-chat-window', async () => {
+    const result = await startWsClient();
+    if (result.ok) {
+      createChatWindow();
+      return { opened: true };
+    }
+    return { opened: false, state: result.state };
   });
 
   // Pulled by the chat window once its listeners are mounted - a pushed
