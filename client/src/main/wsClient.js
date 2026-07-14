@@ -57,6 +57,7 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
       if (msg.type === 'roster') emitter.emit('roster', msg.members);
       else if (msg.type === 'speaking') emitter.emit('speaking', { speakerId: msg.speakerId, isSpeaking: msg.isSpeaking });
       else if (msg.type === 'transcript') emitter.emit('transcript', msg);
+      else if (msg.type === 'session-ended') emitter.emit('session-ended');
     });
 
     socket.on('close', (code, reasonBuf) => {
