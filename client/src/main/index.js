@@ -158,6 +158,18 @@ function startWsClient() {
       // a join/leave changes that fit, so re-apply immediately rather than
       // waiting for the next settings change or window reopen.
       if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+      // The first roster message is the server's actual "you're authenticated
+      // and in the tracked channel" signal - the raw socket's 'open' event
+      // (below) fires the instant the TCP connection completes and the auth
+      // message is merely sent, well before the server has validated it.
+      // Settling on 'open' instead of this would resolve the promise ok:true
+      // moments before an invalid attempt's real 4001/4002/4003 close arrives,
+      // which would have already opened the chat window on a connection that
+      // was never actually authorized.
+      if (!settled) {
+        setConnectionState({ status: 'connected' });
+        settle({ ok: true });
+      }
     });
     client.on('speaking', (event) => broadcastToRenderers('speaking', event));
     client.on('transcript', (event) => {
@@ -176,9 +188,11 @@ function startWsClient() {
     });
 
     client.on('open', () => {
+      // Only resets the reconnect-attempt counter here - the socket having
+      // opened confirms the network path is reachable, but not that the
+      // server has authenticated this attempt yet. See the 'roster' handler
+      // above for why the actual "connected" signal waits for that instead.
       consecutiveFailures = 0;
-      setConnectionState({ status: 'connected' });
-      settle({ ok: true });
     });
 
     client.on('auth-failed', (reason, code) => {
@@ -196,8 +210,9 @@ function startWsClient() {
       setConnectionState(state);
       client.close();
       wsClient = null;
-      // Structurally this can only fire after 'open' already settled the
-      // promise (it's a message over an authenticated connection) - the
+      // Structurally this can only fire after the first 'roster' message
+      // already settled the promise (it's itself a message over an
+      // authenticated connection, and roster always arrives first) - the
       // !settled branch is kept for uniformity with auth-failed rather than
       // relying on that invariant silently.
       if (!settled) settle({ ok: false, state });
