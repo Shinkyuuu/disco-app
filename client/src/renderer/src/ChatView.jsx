@@ -123,33 +123,18 @@ export default function ChatView() {
   // and the button would become unreachable.
   const locked = settings?.chatLocked ?? false;
 
-  if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <button onClick={() => window.api.startChatWindow()}>Retry</button>
-      </ChatFrame>
-    );
-  }
-  if (connectionState.status === 'auth-failed') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <button disabled={!settings} onClick={() => settings && window.api.openLogin(settings.serverAddress)}>
-          Log in
-        </button>
-      </ChatFrame>
-    );
-  }
   if (connectionState.status === 'unreachable') {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
+        <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
         <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
       </ChatFrame>
     );
   }
-  if (connectionState.status === 'session-ended') {
+  if (connectionState.status === 'reconnecting') {
     return (
       <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <button onClick={() => window.api.startChatWindow()}>Reconnect</button>
+        <p>Reconnecting…</p>
       </ChatFrame>
     );
   }
