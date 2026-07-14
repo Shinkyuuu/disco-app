@@ -116,11 +116,11 @@ export default function ChatView() {
 
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
-  // Threaded through even on these error/reconnecting screens: the chat
-  // window can still be locked (and thus click-through at the OS level -
-  // see index.js) while disconnected, and the ⋯ button is the only way to
-  // reach "Unlock window" - without this, hovering it wouldn't carve out its
-  // click-through exception and the button would become unreachable.
+  // Threaded through even on these error screens: the chat window can still
+  // be locked (and thus click-through at the OS level - see index.js) while
+  // disconnected, and the ⋯ button is the only way to reach "Unlock window" -
+  // without this, hovering it wouldn't carve out its click-through exception
+  // and the button would become unreachable.
   const locked = settings?.chatLocked ?? false;
 
   if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
