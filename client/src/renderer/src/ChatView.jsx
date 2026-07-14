@@ -22,11 +22,26 @@ import ChatStatusBanner from './ChatStatusBanner';
 import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
 import { mergeEntries } from './mergeEntries';
 
+// Every non-connected status this component ever shows, all through the same
+// inline banner (see ChatStatusBanner) - no native dialog, no full-panel
+// takeover. reconnecting/unreachable can resolve on their own; auth-failed/
+// session-ended can't (the chat window closes itself shortly after - see
+// scheduleChatWindowClose in client/src/main/index.js), but all four use the
+// identical visual treatment per product decision.
+const STATUS_BANNER_MESSAGES = {
+  reconnecting: () => 'Reconnecting…',
+  unreachable: (state) => `Can't reach ${state.serverAddress} - still retrying in the background.`,
+  'auth-failed': (state) => (state.code === 4001
+    ? 'You need to be in the voice channel being captioned.'
+    : 'Your session expired - please log in again.'),
+  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
+};
+
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
-// headerOverlay is the reconnecting/unreachable status banner (see
-// ChatStatusBanner) - rendered inside the header itself so it can slide up
-// in front of the avatars, visible even while the panel below is collapsed.
+// headerOverlay is the connection-status banner (see ChatStatusBanner) -
+// rendered inside the header itself so it can slide up in front of the
+// avatars, visible even while the panel below is collapsed.
 function ChatFrame({ header = null, headerOverlay = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
@@ -120,25 +135,19 @@ export default function ChatView() {
 
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
-  // Threaded through even while reconnecting/unreachable: the chat window can
+  // Threaded through even while showing a status banner: the chat window can
   // still be locked (and thus click-through at the OS level - see index.js)
   // while disconnected, and the ⋯ button is the only way to reach "Unlock
   // window" - without this, hovering it wouldn't carve out its click-through
   // exception and the button would become unreachable.
   const locked = settings?.chatLocked ?? false;
 
-  // Reconnecting/unreachable no longer replace the whole view - they slide up
-  // as a banner in front of the avatars (see ChatFrame's headerOverlay),
-  // while roster/captions keep rendering normally underneath. auth-failed and
-  // session-ended aren't handled here at all: under the current design the
-  // chat window either never opens (blocked before creation) or gets a native
-  // OS dialog and closes shortly after - see client/src/main/index.js.
-  const statusBanner =
-    connectionState.status === 'unreachable'
-      ? { message: `Can't reach ${connectionState.serverAddress} - still retrying in the background.` }
-      : connectionState.status === 'reconnecting'
-        ? { message: 'Reconnecting…' }
-        : null;
+  // None of these ever replace the whole view - they slide up as a banner in
+  // front of the avatars (see ChatFrame's headerOverlay), while roster/
+  // captions keep rendering normally underneath for as long as the window
+  // stays open.
+  const bannerMessage = STATUS_BANNER_MESSAGES[connectionState.status]?.(connectionState);
+  const statusBanner = bannerMessage ? { message: bannerMessage } : null;
 
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;

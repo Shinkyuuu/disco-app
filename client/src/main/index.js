@@ -15,7 +15,7 @@
  */
 
 import 'dotenv/config';
-import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
@@ -140,10 +140,10 @@ function startWsClient() {
     // terminal failure means "the open attempt failed" (resolved with
     // ok:false, for start-chat-window to turn into a launcher banner
     // instead of ever creating the window). After settling, the exact same
-    // events instead mean "a live session just broke" (shown via a native
-    // dialog - see showTerminalErrorDialog). The persistent handlers below
-    // keep running for the connection's whole lifetime regardless of what
-    // this promise does.
+    // events instead mean "a live session just broke" (shown inline via
+    // ChatStatusBanner - see scheduleChatWindowClose). The persistent
+    // handlers below keep running for the connection's whole lifetime
+    // regardless of what this promise does.
     const settle = (result) => {
       if (settled) return;
       settled = true;
@@ -202,7 +202,7 @@ function startWsClient() {
       wsClient = null;
       if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
       if (!settled) settle({ ok: false, state });
-      else showTerminalErrorDialog(state);
+      else scheduleChatWindowClose();
     });
 
     client.on('session-ended', () => {
@@ -216,7 +216,7 @@ function startWsClient() {
       // !settled branch is kept for uniformity with auth-failed rather than
       // relying on that invariant silently.
       if (!settled) settle({ ok: false, state });
-      else showTerminalErrorDialog(state);
+      else scheduleChatWindowClose();
     });
 
     client.on('close', (code, reason) => {
@@ -244,23 +244,18 @@ function startWsClient() {
   return attempt;
 }
 
-const TERMINAL_ERROR_MESSAGES = {
-  'auth-failed': (state) => (state.code === 4001
-    ? 'You need to be in the voice channel being captioned.'
-    : 'Your session expired - please log in again.'),
-  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
-};
+// A terminal failure on an already-open, already-working chat window (the
+// bot left, or a reconnect attempt discovers the session is gone) is shown
+// inline via ChatStatusBanner - same as reconnecting/unreachable, visible
+// regardless of the window's collapsed state, no native dialog interruption.
+// Since there's nothing left to do in that window (no live captions, no
+// action button), it closes itself once the message has had time to be read.
+const TERMINAL_CLOSE_DELAY_MS = 8000;
 
-// Native OS dialog for a terminal error that broke an already-open, already-
-// working chat window - visible regardless of the window's collapsed/expanded
-// state without needing a second window (unlike the old standalone toast).
-// The chat window closes once the user dismisses it, since there's nothing
-// useful left to show (no live captions).
-function showTerminalErrorDialog(state) {
-  const message = TERMINAL_ERROR_MESSAGES[state.status]?.(state) ?? 'Something went wrong.';
-  const options = { type: 'error', title: 'Disco', message, buttons: ['OK'] };
-  const shown = chatWindow ? dialog.showMessageBox(chatWindow, options) : dialog.showMessageBox(options);
-  shown.then(() => { chatWindow?.close(); });
+function scheduleChatWindowClose() {
+  setTimeout(() => {
+    chatWindow?.close();
+  }, TERMINAL_CLOSE_DELAY_MS);
 }
 
 function handleProfileAuthFailure() {

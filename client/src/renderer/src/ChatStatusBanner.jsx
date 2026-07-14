@@ -70,7 +70,6 @@ export default function ChatStatusBanner({ banner }) {
   return (
     <div className={`chat-status-banner${visible ? ' chat-status-banner--visible' : ''}`}>
       <p>{rendered.message}</p>
-      {rendered.actionLabel && <button onClick={rendered.onAction}>{rendered.actionLabel}</button>}
     </div>
   );
 }

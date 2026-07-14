@@ -661,16 +661,6 @@ select {
   flex: 1;
 }
 
-.chat-status-banner button {
-  flex: none;
-  background: rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-}
-
-.chat-status-banner button:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-
 .chat-header--small {
   height: 158px;
 }
