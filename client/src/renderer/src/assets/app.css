@@ -277,6 +277,12 @@ select {
 
 /* --- title bar (VS Code-style custom chrome for the launcher window) --- */
 .title-bar {
+  position: relative;
+  /* Higher than .error-banner's z-index (20) so the banner's slide-down
+     animation - which starts overlapping the title bar's own vertical span -
+     stays hidden behind it, only becoming visible once it clears the bottom
+     edge, instead of sliding down on top of the title bar's content. */
+  z-index: 21;
   height: 48px;
   flex: none;
   display: flex;
