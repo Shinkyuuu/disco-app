@@ -708,14 +708,6 @@ function registerIpcHandlers() {
 
   ipcMain.handle('logout', () => logout());
 
-  ipcMain.handle('focus-launcher-settings', () => {
-    if (launcherWindow) {
-      if (launcherWindow.isMinimized()) launcherWindow.restore();
-      launcherWindow.focus();
-      launcherWindow.webContents.send('open-settings');
-    }
-  });
-
   // Generic window-chrome controls for the custom (frame: false) title bar -
   // targets whichever window's renderer invoked them, not a hardcoded window,
   // so the same preload API works for any frameless window.

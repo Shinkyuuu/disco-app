@@ -178,7 +178,7 @@ export default function LauncherView() {
   function handleLogin() {
     setBanner(null);
     window.api.openLogin(settings.serverAddress).catch(() =>
-      setBanner('Could not reach the login page - check the server address in Settings and try again.'),
+      setBanner('Could not reach the login page - try again.'),
     );
   }
 
