@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier } from './gateway.js';
 
 function startTestServer(gateOptions) {
   return new Promise((resolve) => {
@@ -168,7 +168,7 @@ test('broadcastToSession delivers only to clients whose live session matches the
   const sent = [];
   const wsA = { readyState: WebSocket.OPEN, send: (msg) => sent.push(['A', JSON.parse(msg)]) };
   const wsB = { readyState: WebSocket.OPEN, send: (msg) => sent.push(['B', JSON.parse(msg)]) };
-  const clients = new Map([[wsA, 'user-a'], [wsB, 'user-b']]);
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-1' }], [wsB, { userId: 'user-b', guildId: 'guild-2' }]]);
   const getLiveSession = (userId) => (userId === 'user-a' ? { guildId: 'guild-1' } : { guildId: 'guild-2' });
   const broadcastToSession = createBroadcaster({ getLiveSession, clients });
 
@@ -183,7 +183,7 @@ test('broadcastToSession delivers only to clients whose live session matches the
 test('broadcastToSession skips a client with no live session', () => {
   const sent = [];
   const wsA = { readyState: WebSocket.OPEN, send: (msg) => sent.push(msg) };
-  const clients = new Map([[wsA, 'user-a']]);
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-1' }]]);
   const broadcastToSession = createBroadcaster({ getLiveSession: () => null, clients });
 
   broadcastToSession('guild-1', { type: 'roster', members: [] });
@@ -194,13 +194,50 @@ test('broadcastToSession skips a client with no live session', () => {
 test('broadcastToSession skips a client whose socket is not open', () => {
   const sent = [];
   const wsA = { readyState: WebSocket.CLOSING, send: (msg) => sent.push(msg) };
-  const clients = new Map([[wsA, 'user-a']]);
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-1' }]]);
   const broadcastToSession = createBroadcaster({
     getLiveSession: () => ({ guildId: 'guild-1' }),
     clients,
   });
 
   broadcastToSession('guild-1', { type: 'roster', members: [] });
+
+  assert.equal(sent.length, 0);
+});
+
+test('notifySessionEnded delivers to a client even though their live session no longer matches - the exact case of a user whose own departure just ended the session', () => {
+  const sent = [];
+  const wsA = { readyState: WebSocket.OPEN, send: (msg) => sent.push(JSON.parse(msg)) };
+  // No getLiveSession dependency at all - clients is keyed by the guildId captured at
+  // auth time, not re-derived from current (already-stale-by-now) voice state.
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-1' }]]);
+  const notifySessionEnded = createSessionEndedNotifier({ clients });
+
+  notifySessionEnded('guild-1');
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].type, 'session-ended');
+  assert.equal(sent[0].guildId, 'guild-1');
+});
+
+test('notifySessionEnded skips a client authorized for a different guild', () => {
+  const sent = [];
+  const wsA = { readyState: WebSocket.OPEN, send: (msg) => sent.push(msg) };
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-2' }]]);
+  const notifySessionEnded = createSessionEndedNotifier({ clients });
+
+  notifySessionEnded('guild-1');
+
+  assert.equal(sent.length, 0);
+});
+
+test('notifySessionEnded skips a client whose socket is not open', () => {
+  const sent = [];
+  const wsA = { readyState: WebSocket.CLOSING, send: (msg) => sent.push(msg) };
+  const clients = new Map([[wsA, { userId: 'user-a', guildId: 'guild-1' }]]);
+  const notifySessionEnded = createSessionEndedNotifier({ clients });
+
+  notifySessionEnded('guild-1');
 
   assert.equal(sent.length, 0);
 });

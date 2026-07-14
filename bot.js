@@ -32,7 +32,7 @@ import {
 } from '@discordjs/voice';
 import prism from 'prism-media';
 import WebSocket from 'ws';
-import { broadcastToSession } from './gateway.js';
+import { broadcastToSession, notifySessionEnded } from './gateway.js';
 import {
   createSession,
   endSession,
@@ -514,7 +514,15 @@ function stopCaptions(guildId) {
   if (!connection) return;
 
   stopTranscribing(guildId);
-  broadcastToSession(guildId, { type: 'session-ended' });
+  // Not broadcastToSession: that filters recipients through each client's
+  // CURRENT live voice-session status, which is exactly wrong here - when
+  // this runs because the owner left the channel, Discord's voice-state
+  // cache already reflects their departure by the time this listener fires,
+  // so broadcastToSession would silently exclude the one client whose
+  // departure just triggered this. notifySessionEnded instead reaches every
+  // client authorized for this guild at connect time, regardless of
+  // whether their live status has since changed.
+  notifySessionEnded(guildId);
   const session = endSession(guildId);
   if (session?.voiceStateListener) {
     client.off(Events.VoiceStateUpdate, session.voiceStateListener);

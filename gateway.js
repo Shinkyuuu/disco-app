@@ -35,7 +35,7 @@ export const httpServer = http.createServer((req, res) => {
   res.end('Not found - use the Disco Electron client to view captions.');
 });
 
-const gatewayClients = new Map(); // ws -> userId
+const gatewayClients = new Map(); // ws -> { userId, guildId }
 const wss = new WebSocketServer({ server: httpServer });
 
 // Unhandled 'error' on either of these throws and kills the whole process.
@@ -82,7 +82,12 @@ export function createAuthGate({ verifyToken, getLiveSession, getRosterSnapshot,
         ws.close(4001, 'not in voice channel');
         return;
       }
-      clients.set(ws, userId);
+      // guildId is captured here, once, rather than re-derived from live voice
+      // state on every later lookup - a teardown notification (see
+      // createSessionEndedNotifier below) needs to reach this client even
+      // after their own voice-state change is what triggered the teardown,
+      // by which point getLiveSession(userId) would no longer recognize them.
+      clients.set(ws, { userId, guildId: liveSession.guildId });
       ws.on('close', () => clients.delete(ws));
       ws.send(JSON.stringify({
         type: 'roster',
@@ -120,10 +125,29 @@ const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: 
 export function createBroadcaster({ getLiveSession, clients }) {
   return function broadcastToSession(guildId, payload) {
     const message = JSON.stringify({ ...payload, guildId });
-    for (const [ws, userId] of clients) {
+    for (const [ws, client] of clients) {
       if (ws.readyState !== WebSocket.OPEN) continue;
-      const liveSession = getLiveSession(userId);
+      const liveSession = getLiveSession(client.userId);
       if (liveSession?.guildId === guildId) ws.send(message);
+    }
+  };
+}
+
+// Unlike broadcastToSession above (roster/speaking/transcript - which must
+// stop reaching a client the instant they leave the channel, for privacy),
+// a session-end teardown notice needs to reach every client who WAS
+// authorized for this guild's session, including whoever's own departure
+// just ended it - by the time stopCaptions runs, Discord's voice-state
+// cache already reflects them as no longer in the channel, so
+// getLiveSession(userId) would incorrectly exclude exactly that client.
+// Uses each client's guildId as captured once at auth time instead.
+export function createSessionEndedNotifier({ clients }) {
+  return function notifySessionEnded(guildId) {
+    const message = JSON.stringify({ type: 'session-ended', guildId });
+    for (const [ws, client] of clients) {
+      if (client.guildId !== guildId) continue;
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      ws.send(message);
     }
   };
 }
@@ -143,6 +167,8 @@ export const broadcastToSession = createBroadcaster({
   getLiveSession: getLiveSessionForUser,
   clients: gatewayClients,
 });
+
+export const notifySessionEnded = createSessionEndedNotifier({ clients: gatewayClients });
 
 export function startGateway() {
   httpServer.listen(PORT_NUMBER);
