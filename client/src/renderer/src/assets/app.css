@@ -646,7 +646,6 @@ select {
   background: #0d0e11;
   border: 1px solid #ffffff;
   border-radius: 8px;
-  -webkit-app-region: drag;
 }
 
 .toast-root p {
@@ -655,7 +654,6 @@ select {
 }
 
 .toast-close {
-  -webkit-app-region: no-drag;
   flex: none;
   line-height: 1;
 }

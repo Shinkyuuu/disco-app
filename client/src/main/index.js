@@ -493,7 +493,7 @@ function createToastWindow() {
     },
   });
   toastWindow.setAlwaysOnTop(true, 'screen-saver');
-  toastWindow.once('ready-to-show', () => toastWindow?.show());
+  toastWindow.once('ready-to-show', () => toastWindow?.showInactive());
   toastWindow.loadURL(rendererUrl('toast'));
   toastWindow.on('closed', () => {
     toastWindow = null;
