@@ -296,6 +296,49 @@ select {
   overflow: hidden;
 }
 
+/* Positioned absolutely against .launcher-root (position: relative) so it
+   overlays right below the title bar without shifting .aurora-stage or
+   anything in it - top must stay in sync with .title-bar's height (48px). */
+.error-banner {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #c0293f;
+  color: #ffffff;
+  animation: error-banner-slide-down 0.25s ease-out;
+}
+
+.error-banner p {
+  margin: 0;
+  flex: 1;
+}
+
+.error-banner-close {
+  flex: none;
+  background: transparent;
+  line-height: 1;
+}
+
+.error-banner-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes error-banner-slide-down {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 .title-bar-icon {
   width: 24px;
   height: 24px;
