@@ -17,7 +17,7 @@
 import 'dotenv/config';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS } from './avatarRegistry.js';
+import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
 
 function fakeS3({ objects = new Map() } = {}) {
   return {
@@ -79,12 +79,20 @@ test('requestUploadUrl returns a signed URL scoped to a versioned key and a vers
 
 test('requestUploadUrl rejects an invalid state', async () => {
   const registry = makeRegistry();
-  await assert.rejects(() => registry.requestUploadUrl('user-1', 'bogus', 'png'), /Invalid avatar state/);
+  await assert.rejects(() => registry.requestUploadUrl('user-1', 'bogus', 'png'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /Invalid avatar state/);
+    return true;
+  });
 });
 
 test('requestUploadUrl rejects an invalid extension', async () => {
   const registry = makeRegistry();
-  await assert.rejects(() => registry.requestUploadUrl('user-1', 'silent', 'exe'), /Invalid avatar extension/);
+  await assert.rejects(() => registry.requestUploadUrl('user-1', 'silent', 'exe'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /Invalid avatar extension/);
+    return true;
+  });
 });
 
 test('confirmUpload validates the object landed, writes the manifest, and updates the in-memory cache', async () => {
@@ -110,7 +118,11 @@ test('confirmUpload throws when the uploaded object was never actually written t
   const registry = makeRegistry();
   await assert.rejects(
     () => registry.confirmUpload('user-1', 'silent', 'deadbeef', 'png'),
-    /Uploaded object not found/,
+    (err) => {
+      assert.ok(err instanceof AvatarValidationError);
+      assert.match(err.message, /Uploaded object not found/);
+      return true;
+    },
   );
 });
 
@@ -120,7 +132,11 @@ test('confirmUpload throws when the uploaded object exceeds the size limit', asy
   objects.set('avatars/user-1/deadbeef-silent.png', { body: Buffer.alloc(6 * 1024 * 1024) });
   await assert.rejects(
     () => registry.confirmUpload('user-1', 'silent', 'deadbeef', 'png'),
-    /exceeds/,
+    (err) => {
+      assert.ok(err instanceof AvatarValidationError);
+      assert.match(err.message, /exceeds/);
+      return true;
+    },
   );
 });
 
@@ -217,5 +233,9 @@ test('clearAvatar on a user with no prior manifest is a safe no-op', async () =>
 
 test('clearAvatar rejects an invalid state', async () => {
   const registry = makeRegistry();
-  await assert.rejects(() => registry.clearAvatar('user-1', 'bogus'), /Invalid avatar state/);
+  await assert.rejects(() => registry.clearAvatar('user-1', 'bogus'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /Invalid avatar state/);
+    return true;
+  });
 });

@@ -20,7 +20,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
 import { getLiveSessionForUser, getUserProfile } from './bot.js';
 import { getSession } from './sessionRegistry.js';
-import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS } from './avatarRegistry.js';
+import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -189,8 +189,14 @@ export function createAvatarConfirmHandler({ verifyToken, confirmUpload }) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ avatarUrl }));
     } catch (err) {
-      res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to confirm avatar upload:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to confirm avatar upload' }));
     }
   };
 }

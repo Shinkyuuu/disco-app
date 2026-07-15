@@ -19,6 +19,8 @@ import crypto from 'node:crypto';
 import { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as defaultGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+export class AvatarValidationError extends Error {}
+
 export const ALLOWED_AVATAR_STATES = ['silent', 'speaking'];
 export const ALLOWED_AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5MB
@@ -85,8 +87,8 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
   }
 
   async function requestUploadUrl(userId, state, ext) {
-    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new Error(`Invalid avatar state: ${state}`);
-    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new Error(`Invalid avatar extension: ${ext}`);
+    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
+    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
     const version = crypto.randomBytes(8).toString('hex');
     const key = objectKey(userId, version, state, ext);
     const uploadUrl = await getSignedUrl(
@@ -98,19 +100,19 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
   }
 
   async function confirmUpload(userId, state, version, ext) {
-    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new Error(`Invalid avatar state: ${state}`);
-    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new Error(`Invalid avatar extension: ${ext}`);
+    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
+    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
     const key = objectKey(userId, version, state, ext);
 
     let head;
     try {
       head = await s3Client.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     } catch (err) {
-      if (isNotFoundError(err)) throw new Error('Uploaded object not found - upload may have failed or expired');
+      if (isNotFoundError(err)) throw new AvatarValidationError('Uploaded object not found - upload may have failed or expired');
       throw err;
     }
     if ((head.ContentLength ?? 0) > MAX_AVATAR_BYTES) {
-      throw new Error(`Uploaded avatar exceeds the ${MAX_AVATAR_BYTES}-byte limit`);
+      throw new AvatarValidationError(`Uploaded avatar exceeds the ${MAX_AVATAR_BYTES}-byte limit`);
     }
 
     const manifest = (await readManifest(userId)) ?? {};
@@ -140,7 +142,7 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
   }
 
   async function clearAvatar(userId, state) {
-    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new Error(`Invalid avatar state: ${state}`);
+    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
     const manifest = (await readManifest(userId)) ?? {};
     manifest[state] = null;
     manifest.updatedAt = Date.now();

@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler } from './gateway.js';
+import { AvatarValidationError } from './avatarRegistry.js';
 
 function startTestServer(gateOptions) {
   return new Promise((resolve) => {
@@ -222,10 +223,10 @@ test('POST /api/avatar/confirm returns 200 with the resolved avatarUrl', async (
   server.close();
 });
 
-test('POST /api/avatar/confirm returns 400 when confirmUpload rejects (e.g. object not found)', async () => {
+test('POST /api/avatar/confirm returns 400 when confirmUpload rejects with a validation error (e.g. object not found)', async () => {
   const handler = createAvatarConfirmHandler({
     verifyToken: () => 'user-1',
-    confirmUpload: async () => { throw new Error('Uploaded object not found'); },
+    confirmUpload: async () => { throw new AvatarValidationError('Uploaded object not found'); },
   });
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
@@ -234,6 +235,23 @@ test('POST /api/avatar/confirm returns 400 when confirmUpload rejects (e.g. obje
     body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
   });
   assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST /api/avatar/confirm returns 500 without leaking the error message when confirmUpload rejects with an unexpected error', async () => {
+  const handler = createAvatarConfirmHandler({
+    verifyToken: () => 'user-1',
+    confirmUpload: async () => { throw new Error('network timeout'); },
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
+  });
+  const bodyText = await res.text();
+  assert.equal(res.status, 500);
+  assert.ok(!bodyText.includes('network timeout'));
   server.close();
 });
 
