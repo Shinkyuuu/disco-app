@@ -137,3 +137,46 @@ test('confirmUpload for speaking preserves an already-confirmed silent entry in 
   assert.equal(cached.silentURL, 'https://cdn.example.com/avatars/user-1/aaa-silent.png');
   assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking.jpg');
 });
+
+test('resolveAvatarUrls returns cached urls without touching S3 when already resolved', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  const { version } = await registry.requestUploadUrl('user-1', 'silent', 'png');
+  objects.set(`avatars/user-1/${version}-silent.png`, { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', version, 'png');
+
+  objects.delete('avatars/user-1/manifest.json'); // prove this isn't re-read
+  const urls = await registry.resolveAvatarUrls('user-1');
+  assert.equal(urls.silentURL, `https://cdn.example.com/avatars/user-1/${version}-silent.png`);
+});
+
+test('resolveAvatarUrls reads the S3 manifest for a user not yet in the in-memory cache', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-2/manifest.json', {
+    body: JSON.stringify({ silent: { version: 'zzz', ext: 'webp' }, speaking: null }),
+  });
+
+  const urls = await registry.resolveAvatarUrls('user-2');
+
+  assert.equal(urls.silentURL, 'https://cdn.example.com/avatars/user-2/zzz-silent.webp');
+  assert.equal(urls.speakingURL, null);
+  assert.deepEqual(registry.getCachedAvatarUrls('user-2'), urls);
+});
+
+test('resolveAvatarUrls caches null for a user with no manifest, and never re-fetches', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+
+  const first = await registry.resolveAvatarUrls('user-3');
+  assert.equal(first, null);
+  assert.equal(registry.getCachedAvatarUrls('user-3'), null);
+
+  // If this were re-fetched, it would now find a manifest - proving the
+  // negative cache is honored instead.
+  objects.set('avatars/user-3/manifest.json', {
+    body: JSON.stringify({ silent: { version: 'x', ext: 'png' } }),
+  });
+  const second = await registry.resolveAvatarUrls('user-3');
+  assert.equal(second, null);
+});
