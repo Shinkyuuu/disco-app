@@ -254,7 +254,7 @@ export async function handleAuthCallback(req, res) {
   }
 }
 
-function readJsonBody(req) {
+export function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('error', reject);
