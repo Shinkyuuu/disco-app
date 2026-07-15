@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler } from './gateway.js';
 
 function startTestServer(gateOptions) {
   return new Promise((resolve) => {
@@ -161,6 +161,107 @@ test('GET /api/me returns 404 when the user has no matching guild member', async
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/me`, { headers: { Authorization: 'Bearer tok' } });
   assert.equal(res.status, 404);
+  server.close();
+});
+
+test('POST /api/avatar/upload-url returns 200 with uploadUrl+version for a valid request', async () => {
+  const handler = createAvatarUploadUrlHandler({
+    verifyToken: (token) => (token === 'good-token' ? 'user-1' : null),
+    requestUploadUrl: async (userId, state, ext) => ({ uploadUrl: `https://s3/${userId}/${state}.${ext}`, version: 'v1' }),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/upload-url`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer good-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'silent', ext: 'png' }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.uploadUrl, 'https://s3/user-1/silent.png');
+  assert.equal(body.version, 'v1');
+  server.close();
+});
+
+test('POST /api/avatar/upload-url returns 401 without a valid token', async () => {
+  const handler = createAvatarUploadUrlHandler({ verifyToken: () => null, requestUploadUrl: async () => ({}) });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/upload-url`, {
+    method: 'POST',
+    body: JSON.stringify({ state: 'silent', ext: 'png' }),
+  });
+  assert.equal(res.status, 401);
+  server.close();
+});
+
+test('POST /api/avatar/upload-url returns 400 for an invalid state or ext', async () => {
+  const handler = createAvatarUploadUrlHandler({ verifyToken: () => 'user-1', requestUploadUrl: async () => ({}) });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/upload-url`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'bogus', ext: 'png' }),
+  });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST /api/avatar/confirm returns 200 with the resolved avatarUrl', async () => {
+  const handler = createAvatarConfirmHandler({
+    verifyToken: () => 'user-1',
+    confirmUpload: async (userId, state, version, ext) => `https://cdn/${userId}/${version}-${state}.${ext}`,
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.avatarUrl, 'https://cdn/user-1/v1-silent.png');
+  server.close();
+});
+
+test('POST /api/avatar/confirm returns 400 when confirmUpload rejects (e.g. object not found)', async () => {
+  const handler = createAvatarConfirmHandler({
+    verifyToken: () => 'user-1',
+    confirmUpload: async () => { throw new Error('Uploaded object not found'); },
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
+  });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST /api/avatar/clear returns 200 on success', async () => {
+  const cleared = [];
+  const handler = createAvatarClearHandler({
+    verifyToken: () => 'user-1',
+    clearAvatar: async (userId, state) => { cleared.push([userId, state]); },
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/clear`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'speaking' }),
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(cleared, [['user-1', 'speaking']]);
+  server.close();
+});
+
+test('POST /api/avatar/clear returns 401 without a valid token', async () => {
+  const handler = createAvatarClearHandler({ verifyToken: () => null, clearAvatar: async () => {} });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/clear`, {
+    method: 'POST',
+    body: JSON.stringify({ state: 'silent' }),
+  });
+  assert.equal(res.status, 401);
   server.close();
 });
 
