@@ -139,11 +139,18 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return urls;
   }
 
-  // resolveAvatarUrls (Task 2) and clearAvatar (Task 3) are added directly
-  // inside this same function body in later tasks - they close over
-  // `registry`/`readManifest`/`writeManifest`/`urlsFromManifest` exactly like
-  // confirmUpload above, so no internal exports are needed between tasks.
-  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls };
+  async function clearAvatar(userId, state) {
+    if (!ALLOWED_AVATAR_STATES.includes(state)) throw new Error(`Invalid avatar state: ${state}`);
+    const manifest = (await readManifest(userId)) ?? {};
+    manifest[state] = null;
+    manifest.updatedAt = Date.now();
+    await writeManifest(userId, manifest);
+
+    const urls = urlsFromManifest(userId, manifest);
+    registry.set(userId, urls.silentURL || urls.speakingURL ? urls : null);
+  }
+
+  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar };
 }
 
 const { AWS_REGION, S3_AVATAR_BUCKET, AVATAR_CDN_BASE_URL } = process.env;

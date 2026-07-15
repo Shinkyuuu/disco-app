@@ -180,3 +180,42 @@ test('resolveAvatarUrls caches null for a user with no manifest, and never re-fe
   const second = await registry.resolveAvatarUrls('user-3');
   assert.equal(second, null);
 });
+
+test('clearAvatar nulls one state while leaving the other intact', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+  await registry.confirmUpload('user-1', 'speaking', 'bbb', 'png');
+
+  await registry.clearAvatar('user-1', 'silent');
+
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.silentURL, null);
+  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking.png');
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.equal(manifest.silent, null);
+});
+
+test('clearAvatar caches null (not an object of nulls) once both states are cleared', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+
+  await registry.clearAvatar('user-1', 'silent');
+
+  assert.equal(registry.getCachedAvatarUrls('user-1'), null);
+});
+
+test('clearAvatar on a user with no prior manifest is a safe no-op', async () => {
+  const registry = makeRegistry();
+  await registry.clearAvatar('user-never-uploaded', 'silent');
+  assert.equal(registry.getCachedAvatarUrls('user-never-uploaded'), null);
+});
+
+test('clearAvatar rejects an invalid state', async () => {
+  const registry = makeRegistry();
+  await assert.rejects(() => registry.clearAvatar('user-1', 'bogus'), /Invalid avatar state/);
+});
