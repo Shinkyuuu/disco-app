@@ -119,3 +119,15 @@ test('does not crash the process on a non-101 handshake response (e.g. a 502 fro
   client.close();
   server.close();
 });
+
+test('emits session-ended when the server sends a session-ended message', async () => {
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type === 'auth') ws.send(JSON.stringify({ type: 'session-ended' }));
+  });
+
+  const client = createWsClient({ serverAddress: `localhost:${port}`, token: 'tok' });
+  await new Promise((resolve) => client.on('session-ended', resolve));
+
+  client.close();
+  wss.close();
+});

@@ -18,18 +18,37 @@ import { useEffect, useRef, useState } from 'react';
 import SpeakerStrip from './SpeakerStrip';
 import MessageLog, { MESSAGE_VISIBLE_MS, MESSAGE_FADE_MS } from './MessageLog';
 import WindowMenu from './WindowMenu';
+import ChatStatusBanner from './ChatStatusBanner';
 import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
 import { mergeEntries } from './mergeEntries';
 
+// Every non-connected status this component ever shows, all through the same
+// inline banner (see ChatStatusBanner) - no native dialog, no full-panel
+// takeover. reconnecting/unreachable can resolve on their own; auth-failed/
+// session-ended can't (the chat window closes itself shortly after - see
+// scheduleChatWindowClose in client/src/main/index.js), but all four use the
+// identical visual treatment per product decision.
+const STATUS_BANNER_MESSAGES = {
+  reconnecting: () => 'Reconnecting…',
+  unreachable: (state) => `Can't reach ${state.serverAddress} - still retrying in the background.`,
+  'auth-failed': (state) => (state.code === 4001
+    ? 'You need to be in the voice channel being captioned.'
+    : 'Your session expired - please log in again.'),
+  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
+};
+
 // Shared frame: invisible header strip (avatars float here, and it drags the
 // frameless window) above the opaque chat panel with the window menu.
-// menuSections mirrors which items the ⋯ menu's popup should include (see
-// WindowMenu/ChatMenuView) - only the normal, non-error render below passes
-// any; the error-state renders further down pass none, leaving just Exit.
-function ChatFrame({ header = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
+// headerOverlay is the connection-status banner (see ChatStatusBanner) -
+// rendered inside the header itself so it can slide up in front of the
+// avatars, visible even while the panel below is collapsed.
+function ChatFrame({ header = null, headerOverlay = null, panelClass = '', avatarSize = 'small', avatarMode = 'discord', collapsed = false, locked = false, panelStyle, menuSections, children }) {
   return (
     <div className="chat-root">
-      <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>{header}</div>
+      <div className={`chat-header chat-header--${avatarSize} ${avatarMode === 'discord' ? 'chat-header--discord' : ''}`.trim()}>
+        {header}
+        {headerOverlay}
+      </div>
       <div className={`chat-panel ${panelClass} ${collapsed ? 'chat-panel--collapsed' : ''}`.trim()} style={panelStyle}>
         <WindowMenu sections={menuSections} locked={locked} />
         {!collapsed && children}
@@ -116,46 +135,19 @@ export default function ChatView() {
 
   const avatarSize = settings?.avatarSize ?? 'small';
   const avatarMode = settings?.avatarMode ?? 'discord';
-  // Threaded through even on these error/reconnecting screens: the chat
-  // window can still be locked (and thus click-through at the OS level -
-  // see index.js) while disconnected, and the ⋯ button is the only way to
-  // reach "Unlock window" - without this, hovering it wouldn't carve out its
-  // click-through exception and the button would become unreachable.
+  // Threaded through even while showing a status banner: the chat window can
+  // still be locked (and thus click-through at the OS level - see index.js)
+  // while disconnected, and the ⋯ button is the only way to reach "Unlock
+  // window" - without this, hovering it wouldn't carve out its click-through
+  // exception and the button would become unreachable.
   const locked = settings?.chatLocked ?? false;
 
-  if (connectionState.status === 'auth-failed' && connectionState.code === 4001) {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>You need to be in the voice channel being captioned.</p>
-        <button onClick={() => window.api.startChatWindow()}>Retry</button>
-      </ChatFrame>
-    );
-  }
-  if (connectionState.status === 'auth-failed') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Your session expired - please log in again.</p>
-        <button disabled={!settings} onClick={() => settings && window.api.openLogin(settings.serverAddress)}>
-          Log in
-        </button>
-      </ChatFrame>
-    );
-  }
-  if (connectionState.status === 'unreachable') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Can't reach {connectionState.serverAddress} - still retrying in the background.</p>
-        <button onClick={() => window.api.focusLauncherSettings()}>Edit server address in Settings</button>
-      </ChatFrame>
-    );
-  }
-  if (connectionState.status === 'reconnecting') {
-    return (
-      <ChatFrame avatarSize={avatarSize} avatarMode={avatarMode} locked={locked} panelClass="chat-panel--message">
-        <p>Reconnecting…</p>
-      </ChatFrame>
-    );
-  }
+  // None of these ever replace the whole view - they slide up as a banner in
+  // front of the avatars (see ChatFrame's headerOverlay), while roster/
+  // captions keep rendering normally underneath for as long as the window
+  // stays open.
+  const bannerMessage = STATUS_BANNER_MESSAGES[connectionState.status]?.(connectionState);
+  const statusBanner = bannerMessage ? { message: bannerMessage } : null;
 
   const chatSize = settings?.chatSize ?? 'medium';
   const chatOpacity = settings?.chatOpacity ?? 1;
@@ -188,6 +180,7 @@ export default function ChatView() {
           profileBySpeaker={profileBySpeaker}
         />
       }
+      headerOverlay={<ChatStatusBanner banner={statusBanner} />}
     >
       <MessageLog entries={entries} colorBySpeaker={colorBySpeaker} chatSize={chatSize} />
     </ChatFrame>
