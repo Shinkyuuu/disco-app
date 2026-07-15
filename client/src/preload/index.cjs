@@ -40,7 +40,6 @@ contextBridge.exposeInMainWorld('api', {
   onRoster: subscribe('roster', (callback) => (_e, members) => callback(members)),
   onSpeaking: subscribe('speaking', (callback) => (_e, event) => callback(event)),
   onTranscript: subscribe('transcript', (callback) => (_e, event) => callback(event)),
-  focusLauncherSettings: () => ipcRenderer.invoke('focus-launcher-settings'),
   onOpenSettings: subscribe('open-settings', (callback) => () => callback()),
   onConnectionState: subscribe('ws-connection-state', (callback) => (_e, state) => callback(state)),
   onSettingsChanged: subscribe('settings-changed', (callback) => (_e, partial) => callback(partial)),
