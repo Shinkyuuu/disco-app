@@ -17,7 +17,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { scopeDir, slotDirName } from './profiles.js';
+
+import { scopeDir, slotDirName, resolveSpeakerProfile } from './profiles.js';
 
 test('scopeDir joins a numeric friend id under the friends subdirectory', () => {
   assert.equal(
@@ -55,4 +56,22 @@ test('slotDirName rejects out-of-range indices', () => {
 test('slotDirName rejects non-integer indices', () => {
   assert.throws(() => slotDirName(2.5), RangeError);
   assert.throws(() => slotDirName('2'), RangeError);
+});
+
+function fakeStore({ friendProfiles = {}, defaultProfiles = [] } = {}) {
+  return { get: (key) => (key === 'friendProfiles' ? friendProfiles : defaultProfiles) };
+}
+
+// The friend-match and default-slot-match branches of resolveSpeakerProfile
+// (isFriendOverride: true / false respectively) both call readImagesFor,
+// which reaches app.getPath('userData') and requires a real Electron
+// runtime unavailable under `node --test`. Same limitation that already
+// leaves pickAvatarImage/clearAvatarImage untested in this file. Those two
+// branches are simple, directly-readable boolean literals in
+// resolveSpeakerProfile (client/src/main/profiles.js); their correctness
+// rests on code review rather than an automated test here.
+test('resolveSpeakerProfile marks the empty fallback (no friend, no valid slot) as isFriendOverride: false', () => {
+  const store = fakeStore();
+  const profile = resolveSpeakerProfile(store, { speakerId: 'user-3', slotIndex: -1 });
+  assert.equal(profile.isFriendOverride, false);
 });

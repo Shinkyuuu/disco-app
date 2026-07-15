@@ -18,7 +18,7 @@ import 'dotenv/config';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
-import { getLiveSessionForUser, getUserProfile } from './bot.js';
+import { getLiveSessionForUser, getUserProfile, rebroadcastRosterIfLive } from './bot.js';
 import { getSession } from './sessionRegistry.js';
 import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
 
@@ -163,7 +163,7 @@ export function createAvatarUploadUrlHandler({ verifyToken, requestUploadUrl }) 
   };
 }
 
-export function createAvatarConfirmHandler({ verifyToken, confirmUpload }) {
+export function createAvatarConfirmHandler({ verifyToken, confirmUpload, onAvatarChanged }) {
   return async function handleAvatarConfirm(req, res) {
     const userId = requireBearerUserId(req, verifyToken);
     if (!userId) {
@@ -186,6 +186,7 @@ export function createAvatarConfirmHandler({ verifyToken, confirmUpload }) {
     }
     try {
       const avatarUrl = await confirmUpload(userId, body.state, body.version, body.ext);
+      onAvatarChanged?.(userId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ avatarUrl }));
     } catch (err) {
@@ -201,7 +202,7 @@ export function createAvatarConfirmHandler({ verifyToken, confirmUpload }) {
   };
 }
 
-export function createAvatarClearHandler({ verifyToken, clearAvatar }) {
+export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarChanged }) {
   return async function handleAvatarClear(req, res) {
     const userId = requireBearerUserId(req, verifyToken);
     if (!userId) {
@@ -223,6 +224,7 @@ export function createAvatarClearHandler({ verifyToken, clearAvatar }) {
       return;
     }
     await clearAvatar(userId, body.state);
+    onAvatarChanged?.(userId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({}));
   };
@@ -230,8 +232,8 @@ export function createAvatarClearHandler({ verifyToken, clearAvatar }) {
 
 const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: getUserProfile });
 const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
-const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload });
-const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar });
+const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
 
 export function createBroadcaster({ getLiveSession, clients }) {
   return function broadcastToSession(guildId, payload) {
