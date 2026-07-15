@@ -16,13 +16,33 @@
 
 // Pure mapping from a resolved profile + current mode/speaking state to concrete
 // render values. No Electron dependency - unit-tested like backoff.js/protocolUrl.js.
-export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile }) {
-  const avatarSrc =
-    avatarMode === 'discord'
-      ? discordAvatarURL
-      : (isSpeaking ? profile.avatarSpeaking ?? profile.avatarSilent : profile.avatarSilent) ?? discordAvatarURL;
+export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile, customAvatarSilentURL, customAvatarSpeakingURL }) {
+  if (avatarMode === 'discord') {
+    return { avatarSrc: discordAvatarURL, usernameColor: profile.usernameColor ?? null, chatColor: profile.chatColor ?? null };
+  }
+
+  // profile.avatarSilent/avatarSpeaking came from resolveSpeakerProfile, which
+  // returns either a friend override OR a generic default-slot image - never
+  // both. isFriendOverride distinguishes which, so the broadcast avatar (this
+  // speaker's own upload) can be ranked between them: friend override wins,
+  // but a broadcast avatar still beats a merely-generic default-slot image.
+  //
+  // Each tier resolves its OWN silent/speaking pair first (falling back to
+  // its own other state if the current one is missing) before precedence
+  // moves to the next tier - a tier with only one state set must still beat
+  // a lower tier's same-state image, not lose to it.
+  function tierValue(silentVal, speakingVal) {
+    const primary = isSpeaking ? speakingVal : silentVal;
+    const fallback = isSpeaking ? silentVal : speakingVal;
+    return primary ?? fallback ?? null;
+  }
+
+  const friendValue = profile.isFriendOverride ? tierValue(profile.avatarSilent, profile.avatarSpeaking) : null;
+  const broadcastValue = tierValue(customAvatarSilentURL, customAvatarSpeakingURL);
+  const defaultValue = profile.isFriendOverride ? null : tierValue(profile.avatarSilent, profile.avatarSpeaking);
+
   return {
-    avatarSrc,
+    avatarSrc: friendValue ?? broadcastValue ?? defaultValue ?? discordAvatarURL,
     usernameColor: profile.usernameColor ?? null,
     chatColor: profile.chatColor ?? null,
   };

@@ -206,10 +206,12 @@ test('POST /api/avatar/upload-url returns 400 for an invalid state or ext', asyn
   server.close();
 });
 
-test('POST /api/avatar/confirm returns 200 with the resolved avatarUrl', async () => {
+test('POST /api/avatar/confirm returns 200 with the resolved avatarUrl and notifies onAvatarChanged', async () => {
+  const changed = [];
   const handler = createAvatarConfirmHandler({
     verifyToken: () => 'user-1',
     confirmUpload: async (userId, state, version, ext) => `https://cdn/${userId}/${version}-${state}.${ext}`,
+    onAvatarChanged: (userId) => changed.push(userId),
   });
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
@@ -220,13 +222,16 @@ test('POST /api/avatar/confirm returns 200 with the resolved avatarUrl', async (
   const body = await res.json();
   assert.equal(res.status, 200);
   assert.equal(body.avatarUrl, 'https://cdn/user-1/v1-silent.png');
+  assert.deepEqual(changed, ['user-1']);
   server.close();
 });
 
-test('POST /api/avatar/confirm returns 400 when confirmUpload rejects with a validation error (e.g. object not found)', async () => {
+test('POST /api/avatar/confirm returns 400 when confirmUpload rejects with a validation error (e.g. object not found), and does not notify onAvatarChanged', async () => {
+  const changed = [];
   const handler = createAvatarConfirmHandler({
     verifyToken: () => 'user-1',
     confirmUpload: async () => { throw new AvatarValidationError('Uploaded object not found'); },
+    onAvatarChanged: (userId) => changed.push(userId),
   });
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
@@ -235,6 +240,25 @@ test('POST /api/avatar/confirm returns 400 when confirmUpload rejects with a val
     body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
   });
   assert.equal(res.status, 400);
+  assert.deepEqual(changed, []);
+  server.close();
+});
+
+test('POST /api/avatar/confirm returns 401 without a valid token, and does not notify onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarConfirmHandler({
+    verifyToken: () => null,
+    confirmUpload: async () => 'https://cdn/x',
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ state: 'silent', version: 'v1', ext: 'png' }),
+  });
+  assert.equal(res.status, 401);
+  assert.deepEqual(changed, []);
   server.close();
 });
 
@@ -255,11 +279,13 @@ test('POST /api/avatar/confirm returns 500 without leaking the error message whe
   server.close();
 });
 
-test('POST /api/avatar/clear returns 200 on success', async () => {
+test('POST /api/avatar/clear returns 200 on success and notifies onAvatarChanged', async () => {
   const cleared = [];
+  const changed = [];
   const handler = createAvatarClearHandler({
     verifyToken: () => 'user-1',
     clearAvatar: async (userId, state) => { cleared.push([userId, state]); },
+    onAvatarChanged: (userId) => changed.push(userId),
   });
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/clear`, {
@@ -269,17 +295,24 @@ test('POST /api/avatar/clear returns 200 on success', async () => {
   });
   assert.equal(res.status, 200);
   assert.deepEqual(cleared, [['user-1', 'speaking']]);
+  assert.deepEqual(changed, ['user-1']);
   server.close();
 });
 
-test('POST /api/avatar/clear returns 401 without a valid token', async () => {
-  const handler = createAvatarClearHandler({ verifyToken: () => null, clearAvatar: async () => {} });
+test('POST /api/avatar/clear returns 401 without a valid token, and does not notify onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarClearHandler({
+    verifyToken: () => null,
+    clearAvatar: async () => {},
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/clear`, {
     method: 'POST',
     body: JSON.stringify({ state: 'silent' }),
   });
   assert.equal(res.status, 401);
+  assert.deepEqual(changed, []);
   server.close();
 });
 

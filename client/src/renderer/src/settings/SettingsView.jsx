@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import YourProfileSection from './YourProfileSection';
 import DefaultSlotsSection from './DefaultSlotsSection';
 import FriendOverridesSection from './FriendOverridesSection';
+import PublicAvatarSection from './PublicAvatarSection';
 import ChatAppearanceSection from './ChatAppearanceSection';
 import { resolveFontOption, DEFAULT_FONT_ID } from '../chatAppearanceOptions';
 
@@ -74,6 +75,7 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
         <ChatAppearanceSection settings={settings} onSettingsChange={onSettingsChange} />
 
         <YourProfileSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
+        <PublicAvatarSection loggedInUserId={loggedInUserId} />
         <FriendOverridesSection friends={otherFriends} onChange={reload} />
         <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
       </div>
