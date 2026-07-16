@@ -409,12 +409,6 @@ select {
   padding-top: 100px;
 }
 
-/* Custom avatar mode but no avatar image set yet - reserve room for just
-   the speech bubble. */
-.launcher-card-wrap--bubble-only {
-  padding-top: 40px;
-}
-
 .launcher-content {
   position: relative;
   z-index: 1;
@@ -1240,9 +1234,9 @@ select {
 
 /* Avatar/speech-bubble companion (custom avatar mode only) - peeks above
    and behind .launcher-content. Positioned within .launcher-card-wrap,
-   which reserves the room above the card via its --peeking/--bubble-only
-   modifier. Clipped to that same reserved height so the avatar is cut off
-   cleanly where the card begins (rather than bleeding through the card's
+   which reserves the room above the card via its --peeking modifier.
+   Clipped to that same reserved height so the avatar is cut off cleanly
+   where the card begins (rather than bleeding through the card's
    translucent background) - it reads as popping out from behind the card. */
 .profile-companion {
   position: absolute;
@@ -1258,10 +1252,6 @@ select {
 
 .launcher-card-wrap--peeking .profile-companion {
   height: 100px;
-}
-
-.launcher-card-wrap--bubble-only .profile-companion {
-  height: 40px;
 }
 
 .profile-companion-avatar {

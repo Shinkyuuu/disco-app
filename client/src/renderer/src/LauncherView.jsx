@@ -174,15 +174,12 @@ export default function LauncherView() {
 
   if (!settings) return null;
 
-  // Governs the peeking-avatar/speech-bubble companion: only shown for a
-  // reachable, found, custom-avatar-mode profile, and only "peeking" (vs.
-  // bubble-only) once the user has actually set a custom avatar image.
-  const companionMode =
-    settings.hasSessionToken && profileState.reachable && profileState.profile && settings.avatarMode === 'custom'
-      ? ownAppearance?.avatarSilent
-        ? 'peeking'
-        : 'bubble-only'
-      : null;
+  // Governs the peeking-avatar/speech-bubble companion: shown for a
+  // reachable, found, custom-avatar-mode profile. The avatar always renders
+  // (falling back to the bundled mascot image), so the card always reserves
+  // room for the full peeking companion.
+  const showCompanion =
+    settings.hasSessionToken && profileState.reachable && profileState.profile && settings.avatarMode === 'custom';
 
   function handleLogin() {
     setBanner(null);
@@ -234,21 +231,9 @@ export default function LauncherView() {
           <AboutView onBack={() => setPage('main')} />
         ) : (
           <>
-            <div
-              className={`launcher-card-wrap${
-                companionMode === 'peeking'
-                  ? ' launcher-card-wrap--peeking'
-                  : companionMode === 'bubble-only'
-                    ? ' launcher-card-wrap--bubble-only'
-                    : ''
-              }`}
-            >
-              {companionMode && (
-                <ProfileCompanion
-                  avatarMode={settings.avatarMode}
-                  peekProfile={ownAppearance}
-                  discordAvatarURL={profileState.profile.avatarURL}
-                />
+            <div className={`launcher-card-wrap${showCompanion ? ' launcher-card-wrap--peeking' : ''}`}>
+              {showCompanion && (
+                <ProfileCompanion avatarMode={settings.avatarMode} peekProfile={ownAppearance} />
               )}
               <div className="launcher-content">
                 {settings.hasSessionToken ? (

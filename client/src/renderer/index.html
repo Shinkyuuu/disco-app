@@ -4,11 +4,13 @@
     <meta charset="UTF-8" />
     <title>Disco</title>
     <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
-    <!-- img-src must include Discord's CDN - speaker avatars load from
-         https://cdn.discordapp.com and are blocked (broken-image icon) otherwise. -->
+    <!-- img-src must include Discord's CDN (speaker avatars from
+         https://cdn.discordapp.com) and CloudFront (broadcast/Public Avatar
+         images from AVATAR_CDN_BASE_URL) - blocked as a broken-image icon
+         otherwise. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com https://*.cloudfront.net"
     />
   </head>
 
