@@ -16,6 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import TitleBar from './TitleBar';
+import ErrorBanner from './ErrorBanner';
 import SettingsView from './settings/SettingsView';
 import AboutView from './AboutView';
 import ProfileHeader from './ProfileHeader';
@@ -26,6 +27,19 @@ import backgroundImage from './assets/background.png';
 import aboutContainerBackground from './assets/about_container_background.png';
 
 const AURORA_COLOR_STOPS = ['#3b82f6', '#7C3AED', '#3b82f6'];
+const BANNER_VISIBLE_MS = 4000;
+
+const OPEN_FAILURE_MESSAGES = {
+  'auth-failed': (state) => (state.code === 4001
+    ? 'You need to be in the voice channel being captioned.'
+    : 'Your session expired - please log in again.'),
+  unreachable: (state) => `Can't reach ${state.serverAddress} - the server isn't responding.`,
+  'session-ended': () => 'The bot left the voice channel - captioning has stopped.',
+};
+
+function describeOpenFailure(state) {
+  return OPEN_FAILURE_MESSAGES[state.status]?.(state) ?? "Couldn't open the chat window - try again.";
+}
 
 function ChatIcon() {
   return (
@@ -98,13 +112,34 @@ function LoginIcon() {
 export default function LauncherView() {
   const [settings, setSettings] = useState(null);
   const [page, setPage] = useState('main');
-  const [loginError, setLoginError] = useState(null);
+  const [banner, setBanner] = useState(null);
   const [profileState, setProfileState] = useState({ reachable: true, profile: null });
   const [ownAppearance, setOwnAppearance] = useState(null);
+  const [chatOpening, setChatOpening] = useState(false);
+
+  // Every main-window error (login failure, chat-window open failure) shows
+  // through this one shared banner, auto-dismissing after BANNER_VISIBLE_MS.
+  // Keyed on the message string itself so a new, different error arriving
+  // before the old one has cleared restarts the timer instead of leaving it
+  // to expire early against the new message.
+  useEffect(() => {
+    if (!banner) return;
+    const timer = setTimeout(() => setBanner(null), BANNER_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, [banner]);
 
   function reloadOwnAppearance(userId) {
     if (!userId) return;
-    window.api.resolveSpeakerProfile({ speakerId: userId, slotIndex: -1 }).then(setOwnAppearance);
+    Promise.all([
+      window.api.resolveSpeakerProfile({ speakerId: userId, slotIndex: -1 }),
+      window.api.getBroadcastAvatar().catch(() => ({ silentURL: null, speakingURL: null })),
+    ]).then(([profile, broadcast]) => {
+      setOwnAppearance({
+        ...profile,
+        avatarSilent: broadcast.silentURL ?? null,
+        avatarSpeaking: broadcast.speakingURL ?? null,
+      });
+    });
   }
 
   useEffect(() => {
@@ -121,15 +156,15 @@ export default function LauncherView() {
           setSettings(result);
           reloadOwnAppearance(result.loggedInUserId);
         });
-        setLoginError(null);
+        setBanner(null);
       }),
       window.api.onAuthError((reason) => {
         if (reason === 'session_expired') {
-          setLoginError(null);
+          setBanner(null);
           window.api.getSettings().then(setSettings);
           return;
         }
-        setLoginError(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed - please try again.');
+        setBanner(reason === 'access_denied' ? 'Login was cancelled.' : 'Login failed - please try again.');
       }),
       window.api.onOpenSettings(() => setPage('settings')),
       window.api.onProfile((result) => setProfileState(result)),
@@ -139,21 +174,33 @@ export default function LauncherView() {
 
   if (!settings) return null;
 
-  // Governs the peeking-avatar/speech-bubble companion: only shown for a
-  // reachable, found, custom-avatar-mode profile, and only "peeking" (vs.
-  // bubble-only) once the user has actually set a custom avatar image.
-  const companionMode =
-    settings.hasSessionToken && profileState.reachable && profileState.profile && settings.avatarMode === 'custom'
-      ? ownAppearance?.avatarSilent
-        ? 'peeking'
-        : 'bubble-only'
-      : null;
+  // Governs the peeking-avatar/speech-bubble companion: shown for a
+  // reachable, found, custom-avatar-mode profile. The avatar always renders
+  // (falling back to the bundled mascot image), so the card always reserves
+  // room for the full peeking companion.
+  const showCompanion =
+    settings.hasSessionToken && profileState.reachable && profileState.profile && settings.avatarMode === 'custom';
 
   function handleLogin() {
-    setLoginError(null);
+    setBanner(null);
     window.api.openLogin(settings.serverAddress).catch(() =>
-      setLoginError('Could not reach the login page - check the server address in Settings and try again.'),
+      setBanner('Could not reach the login page - try again.'),
     );
+  }
+
+  async function handleStartChatWindow() {
+    setChatOpening(true);
+    setBanner(null);
+    const result = await window.api.startChatWindow();
+    // Reset regardless of outcome - on success the launcher is about to be
+    // hidden by createChatWindow() anyway, but the launcher is only hidden,
+    // not unmounted, so leaving this stuck true would show a permanently
+    // disabled "Opening…" button the next time the launcher is shown again
+    // (e.g. after the chat window later closes).
+    setChatOpening(false);
+    if (!result.opened) {
+      setBanner(describeOpenFailure(result.state));
+    }
   }
 
   // Optimistic local settings update; `persist` also writes through to the store.
@@ -165,6 +212,7 @@ export default function LauncherView() {
   return (
     <div className="launcher-root">
       <TitleBar title="Disco" />
+      {banner && <ErrorBanner key={banner} message={banner} onDismiss={() => setBanner(null)} />}
       <div className="aurora-stage">
         {page === 'main' && <img className="launcher-bg-image" src={backgroundImage} alt="" />}
         <div className="aurora-backdrop">
@@ -183,38 +231,20 @@ export default function LauncherView() {
           <AboutView onBack={() => setPage('main')} />
         ) : (
           <>
-            <div
-              className={`launcher-card-wrap${
-                companionMode === 'peeking'
-                  ? ' launcher-card-wrap--peeking'
-                  : companionMode === 'bubble-only'
-                    ? ' launcher-card-wrap--bubble-only'
-                    : ''
-              }`}
-            >
-              {companionMode && (
-                <ProfileCompanion
-                  avatarMode={settings.avatarMode}
-                  peekProfile={ownAppearance}
-                  discordAvatarURL={profileState.profile.avatarURL}
-                />
+            <div className={`launcher-card-wrap${showCompanion ? ' launcher-card-wrap--peeking' : ''}`}>
+              {showCompanion && (
+                <ProfileCompanion avatarMode={settings.avatarMode} peekProfile={ownAppearance} />
               )}
               <div className="launcher-content">
-                {loginError && (
-                  <div role="alert">
-                    <p>{loginError}</p>
-                    <button onClick={handleLogin}>Retry</button>
-                  </div>
-                )}
                 {settings.hasSessionToken ? (
                   <>
                     <p className="launcher-kicker">Welcome back</p>
                     <ProfileHeader profile={profileState.profile} reachable={profileState.reachable} />
                     <div className="launcher-divider" />
                     <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
-                      <button className="launcher-primary-btn" onClick={() => window.api.startChatWindow()}>
+                      <button className="launcher-primary-btn" disabled={chatOpening} onClick={handleStartChatWindow}>
                         <ChatIcon />
-                        Start Chat Window
+                        {chatOpening ? 'Opening…' : 'Start Chat Window'}
                       </button>
                     </BorderGlow>
                     <div className="launcher-button-row">

@@ -19,6 +19,7 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseAuthCode, parseAuthError } from './protocolUrl.js';
 import { exchangeAuthCode } from './authClient.js';
@@ -49,7 +50,17 @@ import {
   setFriendProfileColors,
   removeFriendProfile,
   slotDirName,
+  pickImageFileForBroadcast,
+  MIME_BY_EXT,
 } from './profiles.js';
+import {
+  requestAvatarUploadUrl,
+  confirmAvatarUpload,
+  clearBroadcastAvatar as clearBroadcastAvatarRemote,
+  uploadFileToPresignedUrl,
+  getBroadcastAvatarUrls,
+  setPublicColors,
+} from './avatarClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'disco';
@@ -88,6 +99,7 @@ let pendingAuthError = null;
 let deferredOpenUrl = null;
 
 let wsClient = null;
+let pendingOpenAttempt = null; // the in-flight connection's first-outcome promise, or null once settled
 const PROFILE_POLL_INTERVAL_MS = 5000;
 let profilePollTimer = null;
 let currentRoster = [];
@@ -114,55 +126,153 @@ function setConnectionState(state) {
 }
 
 function startWsClient() {
-  if (wsClient) return;
+  if (wsClient) {
+    return pendingOpenAttempt ?? Promise.resolve(
+      lastConnectionState.status === 'connected' ? { ok: true } : { ok: false, state: lastConnectionState },
+    );
+  }
+
   const token = store.get('sessionToken');
   if (!token) {
     // A stale token gets deleted on auth-failure; surface that as the
     // session-expired screen instead of silently opening a dead window.
-    setConnectionState({ status: 'auth-failed', reason: 'no session' });
-    return;
+    const state = { status: 'auth-failed', reason: 'no session' };
+    setConnectionState(state);
+    return Promise.resolve({ ok: false, state });
   }
 
-  wsClient = createWsClient({ serverAddress: SERVER_ADDRESS, token });
+  const client = createWsClient({ serverAddress: SERVER_ADDRESS, token });
+  wsClient = client;
 
-  wsClient.on('roster', (members) => {
-    currentRoster = members;
-    broadcastToRenderers('roster', members);
-    // Auto-width fits the window to exactly the current roster's avatars -
-    // a join/leave changes that fit, so re-apply immediately rather than
-    // waiting for the next settings change or window reopen.
-    if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+  let settled = false;
+  const attempt = new Promise((resolve) => {
+    // Resolves once, on the connection's first outcome - success, a
+    // terminal failure, or escalation to unreachable. Before settling, a
+    // terminal failure means "the open attempt failed" (resolved with
+    // ok:false, for start-chat-window to turn into a launcher banner
+    // instead of ever creating the window). After settling, the exact same
+    // events instead mean "a live session just broke" (shown inline via
+    // ChatStatusBanner - see scheduleChatWindowClose). The persistent
+    // handlers below keep running for the connection's whole lifetime
+    // regardless of what this promise does.
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      pendingOpenAttempt = null;
+      resolve(result);
+    };
+
+    client.on('roster', (members) => {
+      currentRoster = members;
+      broadcastToRenderers('roster', members);
+      // Auto-width fits the window to exactly the current roster's avatars -
+      // a join/leave changes that fit, so re-apply immediately rather than
+      // waiting for the next settings change or window reopen.
+      if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+      // The first roster message is the server's actual "you're authenticated
+      // and in the tracked channel" signal - the raw socket's 'open' event
+      // (below) fires the instant the TCP connection completes and the auth
+      // message is merely sent, well before the server has validated it.
+      // Settling on 'open' instead of this would resolve the promise ok:true
+      // moments before an invalid attempt's real 4001/4002/4003 close arrives,
+      // which would have already opened the chat window on a connection that
+      // was never actually authorized.
+      if (!settled) {
+        setConnectionState({ status: 'connected' });
+        settle({ ok: true });
+      }
+    });
+    client.on('speaking', (event) => broadcastToRenderers('speaking', event));
+    client.on('transcript', (event) => {
+      // receivedAt drives the renderer's 5-second disappearing-chat timer -
+      // stamped once here so live push and a later state-snapshot pull agree
+      // on the same value (not a fresh Date.now() each time it's read).
+      const finalized = { ...event, receivedAt: Date.now() };
+      messageLog.push(finalized);
+      // Bound the array a very long session's worth of finalized lines could otherwise grow
+      // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
+      // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
+      // 1000 lines is far more scrollback than this product's use case (a live
+      // conversation, not an archive) ever needs to show on reopen.
+      if (messageLog.length > 1000) messageLog.shift();
+      broadcastToRenderers('transcript', finalized);
+    });
+
+    client.on('open', () => {
+      // Only resets the reconnect-attempt counter here - the socket having
+      // opened confirms the network path is reachable, but not that the
+      // server has authenticated this attempt yet. See the 'roster' handler
+      // above for why the actual "connected" signal waits for that instead.
+      consecutiveFailures = 0;
+    });
+
+    client.on('auth-failed', (reason, code) => {
+      const state = { status: 'auth-failed', reason, code };
+      setConnectionState(state);
+      client.close();
+      wsClient = null;
+      if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
+      if (!settled) settle({ ok: false, state });
+      else scheduleChatWindowClose();
+    });
+
+    client.on('session-ended', () => {
+      const state = { status: 'session-ended' };
+      setConnectionState(state);
+      client.close();
+      wsClient = null;
+      // Structurally this can only fire after the first 'roster' message
+      // already settled the promise (it's itself a message over an
+      // authenticated connection, and roster always arrives first) - the
+      // !settled branch is kept for uniformity with auth-failed rather than
+      // relying on that invariant silently.
+      if (!settled) settle({ ok: false, state });
+      else scheduleChatWindowClose();
+    });
+
+    client.on('close', (code, reason) => {
+      // wsClient.js emits 'close' unconditionally, even for a caller-initiated
+      // close (the auth-failed/session-ended handlers above) - only the
+      // reconnect timer is suppressed by closedByCaller there, not this event.
+      // Without this guard, that late close event would silently overwrite the
+      // terminal state those handlers just set with a spurious reconnecting/
+      // unreachable status. Comparing identity (not just wsClient's truthiness)
+      // also correctly ignores a stale event from this now-dead client after
+      // wsClient has since been reassigned to a newer instance.
+      if (wsClient !== client) return;
+      consecutiveFailures += 1;
+      const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
+      const state = { status, code, reason, serverAddress: SERVER_ADDRESS };
+      setConnectionState(state);
+      // unreachable blocks an in-flight open attempt, but once settled (the
+      // window is already open), both reconnecting and unreachable just
+      // update the inline chat screen - no dialog, no window action.
+      if (status === 'unreachable' && !settled) settle({ ok: false, state });
+    });
   });
-  wsClient.on('speaking', (event) => broadcastToRenderers('speaking', event));
-  wsClient.on('transcript', (event) => {
-    // receivedAt drives the renderer's 5-second disappearing-chat timer -
-    // stamped once here so live push and a later state-snapshot pull agree
-    // on the same value (not a fresh Date.now() each time it's read).
-    const finalized = { ...event, receivedAt: Date.now() };
-    messageLog.push(finalized);
-    // Bound the array a very long session's worth of finalized lines could otherwise grow
-    // to unboundedly - this is what gets structured-clone'd over IPC on every chat-window
-    // reopen (state-snapshot), so an unbounded array means an unbounded IPC payload.
-    // 1000 lines is far more scrollback than this product's use case (a live
-    // conversation, not an archive) ever needs to show on reopen.
-    if (messageLog.length > 1000) messageLog.shift();
-    broadcastToRenderers('transcript', finalized);
-  });
-  wsClient.on('open', () => {
-    consecutiveFailures = 0;
-    setConnectionState({ status: 'connected' });
-  });
-  wsClient.on('auth-failed', (reason, code) => {
-    setConnectionState({ status: 'auth-failed', reason, code });
-    wsClient.close();
-    wsClient = null;
-    if (!isRetryableAuthFailure(code)) store.delete('sessionToken');
-  });
-  wsClient.on('close', (code, reason) => {
-    consecutiveFailures += 1;
-    const status = consecutiveFailures >= UNREACHABLE_THRESHOLD ? 'unreachable' : 'reconnecting';
-    setConnectionState({ status, code, reason, serverAddress: SERVER_ADDRESS });
-  });
+
+  pendingOpenAttempt = attempt;
+  return attempt;
+}
+
+// A terminal failure on an already-open, already-working chat window (the
+// bot left, or a reconnect attempt discovers the session is gone) is shown
+// inline via ChatStatusBanner - same as reconnecting/unreachable, visible
+// regardless of the window's collapsed state, no native dialog interruption.
+// Since there's nothing left to do in that window (no live captions, no
+// action button), it closes itself once the message has had time to be read.
+const TERMINAL_CLOSE_DELAY_MS = 8000;
+
+function scheduleChatWindowClose() {
+  // Snapshot the specific window instance rather than closing over the
+  // mutable chatWindow binding - a manual close-then-reopen within the delay
+  // window would otherwise leave this timer pointed at whatever chatWindow
+  // happens to be 8 seconds from now (a different, healthy window), closing
+  // it out from under the user instead of the one this was scheduled for.
+  const target = chatWindow;
+  setTimeout(() => {
+    if (chatWindow === target) chatWindow?.close();
+  }, TERMINAL_CLOSE_DELAY_MS);
 }
 
 function handleProfileAuthFailure() {
@@ -589,9 +699,13 @@ function registerIpcHandlers() {
     if (chatMenuWindow) chatMenuWindow.webContents.send('settings-changed', sanitized);
   });
 
-  ipcMain.handle('start-chat-window', () => {
-    startWsClient();
-    createChatWindow();
+  ipcMain.handle('start-chat-window', async () => {
+    const result = await startWsClient();
+    if (result.ok) {
+      createChatWindow();
+      return { opened: true };
+    }
+    return { opened: false, state: result.state };
   });
 
   // Pulled by the chat window once its listeners are mounted - a pushed
@@ -605,14 +719,6 @@ function registerIpcHandlers() {
   ipcMain.handle('get-profile', () => pollProfileOnce());
 
   ipcMain.handle('logout', () => logout());
-
-  ipcMain.handle('focus-launcher-settings', () => {
-    if (launcherWindow) {
-      if (launcherWindow.isMinimized()) launcherWindow.restore();
-      launcherWindow.focus();
-      launcherWindow.webContents.send('open-settings');
-    }
-  });
 
   // Generic window-chrome controls for the custom (frame: false) title bar -
   // targets whichever window's renderer invoked them, not a hardcoded window,
@@ -664,6 +770,39 @@ function registerIpcHandlers() {
     setFriendProfileColors(store, userId, colors),
   );
   ipcMain.handle('remove-friend-profile', (_event, userId) => removeFriendProfile(store, userId));
+
+  ipcMain.handle('upload-broadcast-avatar', async (_event, kind) => {
+    const picked = await pickImageFileForBroadcast(kind);
+    if (!picked) return null;
+    const { filePath, ext } = picked;
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+
+    const { uploadUrl, version } = await requestAvatarUploadUrl({ serverAddress: SERVER_ADDRESS, token, state: kind, ext });
+    const fileBuffer = fs.readFileSync(filePath);
+    const contentType = MIME_BY_EXT[`.${ext}`] ?? 'application/octet-stream';
+    await uploadFileToPresignedUrl({ uploadUrl, fileBuffer, contentType });
+    const { avatarUrl } = await confirmAvatarUpload({ serverAddress: SERVER_ADDRESS, token, state: kind, version, ext });
+    return avatarUrl;
+  });
+
+  ipcMain.handle('clear-broadcast-avatar', async (_event, kind) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+    await clearBroadcastAvatarRemote({ serverAddress: SERVER_ADDRESS, token, state: kind });
+  });
+
+  ipcMain.handle('set-public-colors', async (_event, { usernameColor, chatColor }) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+    return setPublicColors({ serverAddress: SERVER_ADDRESS, token, usernameColor, chatColor });
+  });
+
+  ipcMain.handle('get-broadcast-avatar', async () => {
+    const token = store.get('sessionToken');
+    if (!token) return { silentURL: null, speakingURL: null };
+    return getBroadcastAvatarUrls({ serverAddress: SERVER_ADDRESS, token });
+  });
 
   ipcMain.handle('resize-window', (event, { width, height }) => {
     BrowserWindow.fromWebContents(event.sender)?.setSize(width, height);

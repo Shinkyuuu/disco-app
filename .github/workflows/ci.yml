@@ -16,10 +16,16 @@ jobs:
     # Not real secrets - auth.js requires SESSION_SECRET to be set at all (throws
     # otherwise), and auth.test.js's buildAuthorizeUrl test compares against
     # DISCORD_APPLICATION_ID's actual value, so both need *some* value present.
-    # These tests never call Discord's real API - any placeholder string works.
+    # avatarRegistry.js similarly requires S3_AVATAR_BUCKET/AVATAR_CDN_BASE_URL/
+    # AWS_REGION to be set at all (throws otherwise) - these tests never call
+    # real AWS APIs (avatarRegistry.test.js injects a fake S3 client), so any
+    # placeholder string works.
     env:
       SESSION_SECRET: ci-test-secret-not-a-real-secret
       DISCORD_APPLICATION_ID: ci-test-application-id
+      S3_AVATAR_BUCKET: ci-test-bucket
+      AVATAR_CDN_BASE_URL: https://ci-test.example.com
+      AWS_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

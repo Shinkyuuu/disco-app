@@ -32,7 +32,7 @@ import {
 } from '@discordjs/voice';
 import prism from 'prism-media';
 import WebSocket from 'ws';
-import { broadcastToSession } from './gateway.js';
+import { broadcastToSession, notifySessionEnded } from './gateway.js';
 import {
   createSession,
   endSession,
@@ -41,6 +41,7 @@ import {
   setRoster,
   activeSessionCount,
 } from './sessionRegistry.js';
+import { avatarRegistry } from './avatarRegistry.js';
 
 const { DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, DEEPGRAM_API_KEY } = process.env;
 
@@ -130,6 +131,48 @@ async function resolveSpeaker(guildId, userId) {
   return { username: member.displayName, avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }) };
 }
 
+// userId -> true while a background resolveAvatarUrls() call for them is in
+// flight, so a burst of roster rebuilds (e.g. several VoiceStateUpdates in a
+// row) doesn't kick off duplicate concurrent S3 lookups for the same user.
+const pendingAvatarResolutions = new Set();
+
+// buildRoster() below must stay synchronous (see the comment there) - this
+// reads only the in-memory cache and, the first time a given user is seen
+// unresolved (e.g. right after a server restart), kicks off a background
+// lookup that re-broadcasts an updated roster once it completes.
+function broadcastAvatarFields(member) {
+  const cached = avatarRegistry.getCachedAvatarUrls(member.id);
+  if (cached === undefined && !pendingAvatarResolutions.has(member.id)) {
+    pendingAvatarResolutions.add(member.id);
+    avatarRegistry.resolveAvatarUrls(member.id)
+      .then(() => rebroadcastRosterIfLive(member.id))
+      .catch((err) => console.error(`Failed to resolve broadcast avatar for ${member.id}:`, err))
+      .finally(() => pendingAvatarResolutions.delete(member.id));
+  }
+  const fields = {};
+  if (cached?.silentURL) fields.customAvatarSilentURL = cached.silentURL;
+  if (cached?.speakingURL) fields.customAvatarSpeakingURL = cached.speakingURL;
+  if (cached?.usernameColor) fields.usernameColor = cached.usernameColor;
+  if (cached?.chatColor) fields.chatColor = cached.chatColor;
+  return fields;
+}
+
+// Re-sends the roster for whichever guild's session userId currently belongs
+// to, if any - used once a background avatar resolution (above) completes,
+// so viewers see the broadcast avatar appear shortly after a restart instead
+// of only on the next unrelated roster change.
+export function rebroadcastRosterIfLive(userId) {
+  const liveSession = getLiveSessionForUser(userId);
+  if (!liveSession) return;
+  const session = getSession(liveSession.guildId);
+  if (!session) return;
+  const channelObj = client.channels.cache.get(liveSession.channelId);
+  if (!channelObj) return;
+  const updatedRoster = buildRoster(channelObj);
+  setRoster(liveSession.guildId, updatedRoster);
+  broadcastToSession(liveSession.guildId, { type: 'roster', channelId: liveSession.channelId, members: updatedRoster });
+}
+
 // key: `${guildId}:${userId}` -> { guildId, opusStream, dgSocket, decoder }
 const activeStreams = new Map();
 // Pipelines whose opusStream has already ended but are still padding out silence to let
@@ -191,6 +234,7 @@ function buildRoster(channel) {
       speakerId: member.id,
       username: member.displayName,
       avatarURL: member.displayAvatarURL({ extension: 'png', size: 128 }),
+      ...broadcastAvatarFields(member),
       // .mute/.deaf combine self- and server- states (either counts)
       isMuted: member.voice.mute ?? false,
       isDeafened: member.voice.deaf ?? false,
@@ -514,6 +558,15 @@ function stopCaptions(guildId) {
   if (!connection) return;
 
   stopTranscribing(guildId);
+  // Not broadcastToSession: that filters recipients through each client's
+  // CURRENT live voice-session status, which is exactly wrong here - when
+  // this runs because the owner left the channel, Discord's voice-state
+  // cache already reflects their departure by the time this listener fires,
+  // so broadcastToSession would silently exclude the one client whose
+  // departure just triggered this. notifySessionEnded instead reaches every
+  // client authorized for this guild at connect time, regardless of
+  // whether their live status has since changed.
+  notifySessionEnded(guildId);
   const session = endSession(guildId);
   if (session?.voiceStateListener) {
     client.off(Events.VoiceStateUpdate, session.voiceStateListener);

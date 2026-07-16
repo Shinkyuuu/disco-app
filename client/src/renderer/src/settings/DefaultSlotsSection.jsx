@@ -24,7 +24,7 @@ export default function DefaultSlotsSection({ profiles, onChange }) {
   }
   return (
     <details className="settings-collapsible">
-      <summary className="settings-heading settings-heading--profile">Default Slots (10)</summary>
+      <summary className="settings-heading">Default Slots (10)</summary>
       <section className="settings-section">
         <p className="settings-subtext">Assigned by join order to speakers without a friend profile.</p>
         <div className="slot-rows">

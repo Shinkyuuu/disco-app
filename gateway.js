@@ -17,9 +17,10 @@
 import 'dotenv/config';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
-import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken } from './auth.js';
-import { getLiveSessionForUser, getUserProfile } from './bot.js';
+import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
+import { getLiveSessionForUser, getUserProfile, rebroadcastRosterIfLive } from './bot.js';
 import { getSession } from './sessionRegistry.js';
+import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -31,11 +32,16 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/auth/exchange') return handleAuthExchange(req, res);
   if (url.pathname === '/auth/icon.png') return handleAuthIcon(req, res);
   if (url.pathname === '/api/me') return handleMe(req, res);
+  if (url.pathname === '/api/avatar/upload-url') return handleAvatarUploadUrl(req, res);
+  if (url.pathname === '/api/avatar/confirm') return handleAvatarConfirm(req, res);
+  if (url.pathname === '/api/avatar/clear') return handleAvatarClear(req, res);
+  if (url.pathname === '/api/avatar/colors') return handleAvatarColors(req, res);
+  if (url.pathname === '/api/avatar/me') return handleAvatarMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found - use the Disco Electron client to view captions.');
 });
 
-const gatewayClients = new Map(); // ws -> userId
+const gatewayClients = new Map(); // ws -> { userId, guildId }
 const wss = new WebSocketServer({ server: httpServer });
 
 // Unhandled 'error' on either of these throws and kills the whole process.
@@ -82,7 +88,12 @@ export function createAuthGate({ verifyToken, getLiveSession, getRosterSnapshot,
         ws.close(4001, 'not in voice channel');
         return;
       }
-      clients.set(ws, userId);
+      // guildId is captured here, once, rather than re-derived from live voice
+      // state on every later lookup - a teardown notification (see
+      // createSessionEndedNotifier below) needs to reach this client even
+      // after their own voice-state change is what triggered the teardown,
+      // by which point getLiveSession(userId) would no longer recognize them.
+      clients.set(ws, { userId, guildId: liveSession.guildId });
       ws.on('close', () => clients.delete(ws));
       ws.send(JSON.stringify({
         type: 'roster',
@@ -115,15 +126,198 @@ export function createMeHandler({ verifyToken, getProfile }) {
   };
 }
 
+function requireBearerUserId(req, verifyToken) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+  return token ? verifyToken(token) : null;
+}
+
+export function createAvatarUploadUrlHandler({ verifyToken, requestUploadUrl }) {
+  return async function handleAvatarUploadUrl(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state or ext' }));
+      return;
+    }
+    try {
+      const result = await requestUploadUrl(userId, body.state, body.ext);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error('Failed to generate avatar upload URL:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to generate upload url' }));
+    }
+  };
+}
+
+export function createAvatarConfirmHandler({ verifyToken, confirmUpload, onAvatarChanged }) {
+  return async function handleAvatarConfirm(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || typeof body.version !== 'string' || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state, version, or ext' }));
+      return;
+    }
+    try {
+      const avatarUrl = await confirmUpload(userId, body.state, body.version, body.ext);
+      onAvatarChanged?.(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ avatarUrl }));
+    } catch (err) {
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to confirm avatar upload:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to confirm avatar upload' }));
+    }
+  };
+}
+
+export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarChanged }) {
+  return async function handleAvatarClear(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state' }));
+      return;
+    }
+    await clearAvatar(userId, body.state);
+    onAvatarChanged?.(userId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({}));
+  };
+}
+
+export function createAvatarColorsHandler({ verifyToken, setProfileColors, onAvatarChanged }) {
+  return async function handleAvatarColors(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!isValidHexColor(body.usernameColor) || !isValidHexColor(body.chatColor)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid usernameColor or chatColor' }));
+      return;
+    }
+    try {
+      const colors = await setProfileColors(userId, { usernameColor: body.usernameColor, chatColor: body.chatColor });
+      onAvatarChanged?.(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(colors));
+    } catch (err) {
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to set profile colors:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to set profile colors' }));
+    }
+  };
+}
+
+export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
+  return async function handleAvatarMe(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const urls = await resolveAvatarUrls(userId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ silentURL: urls?.silentURL ?? null, speakingURL: urls?.speakingURL ?? null }));
+  };
+}
+
 const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: getUserProfile });
+const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
+const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarColors = createAvatarColorsHandler({ verifyToken: verifySessionToken, setProfileColors: avatarRegistry.setProfileColors, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarMe = createAvatarMeHandler({ verifyToken: verifySessionToken, resolveAvatarUrls: avatarRegistry.resolveAvatarUrls });
 
 export function createBroadcaster({ getLiveSession, clients }) {
   return function broadcastToSession(guildId, payload) {
     const message = JSON.stringify({ ...payload, guildId });
-    for (const [ws, userId] of clients) {
+    for (const [ws, client] of clients) {
       if (ws.readyState !== WebSocket.OPEN) continue;
-      const liveSession = getLiveSession(userId);
+      const liveSession = getLiveSession(client.userId);
       if (liveSession?.guildId === guildId) ws.send(message);
+    }
+  };
+}
+
+// Unlike broadcastToSession above (roster/speaking/transcript - which must
+// stop reaching a client the instant they leave the channel, for privacy),
+// a session-end teardown notice needs to reach every client who WAS
+// authorized for this guild's session, including whoever's own departure
+// just ended it - by the time stopCaptions runs, Discord's voice-state
+// cache already reflects them as no longer in the channel, so
+// getLiveSession(userId) would incorrectly exclude exactly that client.
+// Uses each client's guildId as captured once at auth time instead.
+export function createSessionEndedNotifier({ clients }) {
+  return function notifySessionEnded(guildId) {
+    const message = JSON.stringify({ type: 'session-ended', guildId });
+    for (const [ws, client] of clients) {
+      if (client.guildId !== guildId) continue;
+      if (ws.readyState !== WebSocket.OPEN) continue;
+      ws.send(message);
     }
   };
 }
@@ -143,6 +337,8 @@ export const broadcastToSession = createBroadcaster({
   getLiveSession: getLiveSessionForUser,
   clients: gatewayClients,
 });
+
+export const notifySessionEnded = createSessionEndedNotifier({ clients: gatewayClients });
 
 export function startGateway() {
   httpServer.listen(PORT_NUMBER);

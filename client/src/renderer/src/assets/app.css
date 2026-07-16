@@ -40,8 +40,7 @@ body {
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }
 
@@ -92,17 +91,12 @@ button:hover {
   background: #26272d;
 }
 
-input,
-select {
+input {
   background: #26272d;
   color: inherit;
   border: none;
   border-radius: 6px;
   padding: 4px 8px;
-}
-
-select {
-  border: 1px solid rgba(124, 108, 227, 0.4);
 }
 
 /* --- window menu (⋯ with Exit dropdown) --- */
@@ -277,6 +271,12 @@ select {
 
 /* --- title bar (VS Code-style custom chrome for the launcher window) --- */
 .title-bar {
+  position: relative;
+  /* Higher than .error-banner's z-index (20) so the banner's slide-down
+     animation - which starts overlapping the title bar's own vertical span -
+     stays hidden behind it, only becoming visible once it clears the bottom
+     edge, instead of sliding down on top of the title bar's content. */
+  z-index: 21;
   height: 48px;
   flex: none;
   display: flex;
@@ -294,6 +294,55 @@ select {
   display: flex;
   align-items: center;
   overflow: hidden;
+}
+
+/* Positioned absolutely against .launcher-root (position: relative) so it
+   overlays right below the title bar without shifting .aurora-stage or
+   anything in it - top must stay in sync with .title-bar's height (48px). */
+.error-banner {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #c0293f;
+  color: #ffffff;
+  animation: error-banner-slide-down 0.25s ease-out;
+}
+
+.error-banner p {
+  margin: 0;
+  padding-left: 12px;
+  flex: 1;
+}
+
+.error-banner-close {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+.error-banner-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+@keyframes error-banner-slide-down {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .title-bar-icon {
@@ -358,12 +407,6 @@ select {
    (.launcher-content's z-index: 1 vs. .profile-companion's z-index: 0). */
 .launcher-card-wrap--peeking {
   padding-top: 100px;
-}
-
-/* Custom avatar mode but no avatar image set yet - reserve room for just
-   the speech bubble. */
-.launcher-card-wrap--bubble-only {
-  padding-top: 40px;
 }
 
 .launcher-content {
@@ -565,6 +608,7 @@ select {
    window itself is resized to fit, or larger avatars get clipped by the
    window's bounds (CSS overflow has no effect on that clipping). */
 .chat-header {
+  position: relative; /* anchors .chat-status-banner below */
   flex: none;
   display: flex;
   align-items: flex-end;
@@ -575,6 +619,41 @@ select {
   padding: 0 16px 0 28px;
   overflow: hidden;
   -webkit-app-region: drag;
+}
+
+/* Slides up from below the header's own bottom edge into view, in front of
+   the avatars, and slides back down on exit - overflow:hidden on
+   .chat-header above is what keeps translateY(100%) invisible rather than a
+   separate hidden state. Rest state (this rule) is off-screen below; adding
+   --visible (see below) is what ChatStatusBanner toggles to animate either
+   direction - transition-duration here must stay in sync with
+   EXIT_DURATION_MS in ChatStatusBanner.jsx. */
+.chat-status-banner {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #c0293f;
+  color: #ffffff;
+  -webkit-app-region: no-drag;
+  transform: translateY(100%);
+  transition: transform 0.25s ease-out;
+}
+
+.chat-status-banner--visible {
+  transform: translateY(0);
+}
+
+.chat-status-banner p {
+  margin: 0;
+  padding-left: 12px;
+  flex: 1;
 }
 
 .chat-header--small {
@@ -608,7 +687,9 @@ select {
   position: relative;
   flex: 1;
   min-height: 0;
-  z-index: 1;
+  z-index: 3; /* above .chat-status-banner (z-index: 2), which otherwise escapes
+                 .chat-header's non-isolated stacking context and covers the
+                 .window-menu button that lives inside this panel */
   background: #0d0e11;
   border: var(--chat-border-width, 5px) solid #ffffff;
   border-radius: var(--chat-border-radius, 0);
@@ -626,14 +707,6 @@ select {
   height: 0;
   background: transparent;
   border: none;
-}
-
-.chat-panel--message {
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  padding: 16px;
-  text-align: center;
 }
 
 .message-log {
@@ -782,7 +855,7 @@ select {
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 64px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -796,10 +869,20 @@ select {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-left: 12px;
+}
+
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
 }
 
 .settings-heading {
   margin: 0;
+  margin-top: 16px;
   font-size: 15px;
   font-weight: 700;
   text-transform: uppercase;
@@ -808,17 +891,29 @@ select {
   opacity: 1;
 }
 
-.settings-heading--profile {
-  padding-left: 16px; /* matches the padding of the profile boxes below it */
+.settings-scroll > .settings-heading:first-child {
+  margin-top: 0;
 }
 
 .settings-collapsible > summary.settings-heading {
+  position: relative;
   cursor: pointer;
-  list-style: revert;
+  list-style: none;
 }
 
-.settings-collapsible > summary.settings-heading::marker {
+.settings-collapsible > summary.settings-heading::-webkit-details-marker {
+  display: none;
+}
+
+.settings-collapsible > summary.settings-heading::before {
+  content: '▸';
+  position: absolute;
+  left: -14px;
   color: #b3a6ff;
+}
+
+.settings-collapsible[open] > summary.settings-heading::before {
+  content: '▾';
 }
 
 .settings-collapsible[open] > summary.settings-heading {
@@ -838,6 +933,116 @@ select {
   font-size: 14px;
   font-weight: 400;
   margin-bottom: 8px;
+}
+
+.settings-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: #26272d;
+  color: inherit;
+  border: 1px solid rgba(124, 108, 227, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-select-trigger:hover {
+  background: #2c2d34;
+}
+
+.settings-select-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.settings-select-trigger[data-state='open'] .settings-select-icon {
+  transform: rotate(180deg);
+}
+
+.settings-select-content {
+  width: var(--radix-select-trigger-width);
+  overflow: hidden;
+  background: #26272d;
+  border: 1px solid rgba(124, 108, 227, 0.4);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+.settings-select-viewport {
+  padding: 4px;
+}
+
+.settings-select-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.settings-select-item[data-highlighted] {
+  background: rgba(124, 108, 227, 0.25);
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-switch-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border-radius: 10px;
+  background: #3a3b42;
+  transition: background-color 0.15s ease;
+}
+
+.toggle-switch input:checked + .toggle-switch-track {
+  background: #6d5efc;
+}
+
+.toggle-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch input:checked + .toggle-switch-track .toggle-switch-knob {
+  transform: translateX(16px);
+}
+
+.toggle-switch-label {
+  color: inherit;
 }
 
 .about-scroll .settings-heading {
@@ -882,7 +1087,7 @@ select {
 
 /* shared ProfileFieldsEditor */
 .profile-fields {
-  --pf-btn-w: 56px; /* avatar width below derives from this: 2 buttons + gap */
+  --pf-avatar-size: 116px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -909,8 +1114,8 @@ select {
   opacity: 0.7;
 }
 .pf-avatar {
-  width: calc(var(--pf-btn-w) * 2 + 4px);
-  height: calc(var(--pf-btn-w) * 2 + 4px);
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
   border-radius: 12px;
   object-fit: contain;
   background: transparent;
@@ -922,6 +1127,34 @@ select {
   background: #26272d;
   color: #6a6d78;
   font-size: 20px;
+}
+.pf-avatar--busy {
+  opacity: 0.5;
+}
+.pf-avatar-wrap {
+  position: relative;
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
+}
+.pf-avatar-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #6d5efc;
+  border-radius: 50%;
+  animation: pf-avatar-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes pf-avatar-spinner-rotate {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
 }
 .pf-swatch {
   position: relative;
@@ -936,8 +1169,13 @@ select {
   flex: none;
 }
 .pf-swatch--empty {
-  background: #26272d;
-  color: #6a6d78;
+  background: rgba(109, 94, 252, 0.12);
+  border: 1.5px solid #6d5efc;
+  color: #6d5efc;
+}
+.pf-swatch--empty:hover {
+  background: rgba(109, 94, 252, 0.22);
+  border-color: #7c6ce3;
 }
 .pf-color-input {
   position: absolute;
@@ -949,19 +1187,22 @@ select {
 }
 .pf-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 .pf-btn {
-  min-width: var(--pf-btn-w);
-  padding: 2px 8px;
+  padding: 5px 10px;
   font-size: 12px;
+  border-radius: 6px;
 }
 .pf-btn--muted {
   background: transparent;
-  opacity: 0.7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.65);
 }
 .pf-btn--muted:hover {
-  background: #3a3b42;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff;
 }
 
 .pf-color-row {
@@ -1060,13 +1301,21 @@ select {
   top: 8px;
   right: 8px;
   z-index: 1;
-  background: #e81123;
-  color: #fff;
-  font-size: 12px;
-  padding: 3px 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.5);
 }
 .friend-remove:hover {
-  background: #f01c2c;
+  background: rgba(232, 17, 35, 0.15);
+  border-color: rgba(232, 17, 35, 0.5);
+  color: #ff5a68;
 }
 .friend-id {
   font-family: 'Consolas', 'Courier New', monospace;
@@ -1102,9 +1351,9 @@ select {
 
 /* Avatar/speech-bubble companion (custom avatar mode only) - peeks above
    and behind .launcher-content. Positioned within .launcher-card-wrap,
-   which reserves the room above the card via its --peeking/--bubble-only
-   modifier. Clipped to that same reserved height so the avatar is cut off
-   cleanly where the card begins (rather than bleeding through the card's
+   which reserves the room above the card via its --peeking modifier.
+   Clipped to that same reserved height so the avatar is cut off cleanly
+   where the card begins (rather than bleeding through the card's
    translucent background) - it reads as popping out from behind the card. */
 .profile-companion {
   position: absolute;
@@ -1120,10 +1369,6 @@ select {
 
 .launcher-card-wrap--peeking .profile-companion {
   height: 100px;
-}
-
-.launcher-card-wrap--bubble-only .profile-companion {
-  height: 40px;
 }
 
 .profile-companion-avatar {

@@ -16,14 +16,50 @@
 
 // Pure mapping from a resolved profile + current mode/speaking state to concrete
 // render values. No Electron dependency - unit-tested like backoff.js/protocolUrl.js.
-export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile }) {
-  const avatarSrc =
-    avatarMode === 'discord'
-      ? discordAvatarURL
-      : (isSpeaking ? profile.avatarSpeaking ?? profile.avatarSilent : profile.avatarSilent) ?? discordAvatarURL;
+
+// Colors apply the same tier order regardless of avatarMode: a friend
+// override always wins; otherwise the speaker's own broadcast color (if
+// they've set one) beats the viewer's local default-slot color.
+export function resolveProfileColors({ profile, broadcastUsernameColor, broadcastChatColor }) {
+  const usernameColor = profile.isFriendOverride
+    ? (profile.usernameColor ?? null)
+    : (broadcastUsernameColor ?? profile.usernameColor ?? null);
+  const chatColor = profile.isFriendOverride
+    ? (profile.chatColor ?? null)
+    : (broadcastChatColor ?? profile.chatColor ?? null);
+  return { usernameColor, chatColor };
+}
+
+export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile, customAvatarSilentURL, customAvatarSpeakingURL, broadcastUsernameColor, broadcastChatColor }) {
+  const { usernameColor, chatColor } = resolveProfileColors({ profile, broadcastUsernameColor, broadcastChatColor });
+
+  if (avatarMode === 'discord') {
+    return { avatarSrc: discordAvatarURL, usernameColor, chatColor };
+  }
+
+  // profile.avatarSilent/avatarSpeaking came from resolveSpeakerProfile, which
+  // returns either a friend override OR a generic default-slot image - never
+  // both. isFriendOverride distinguishes which, so the broadcast avatar (this
+  // speaker's own upload) can be ranked between them: friend override wins,
+  // but a broadcast avatar still beats a merely-generic default-slot image.
+  //
+  // Each tier resolves its OWN silent/speaking pair first (falling back to
+  // its own other state if the current one is missing) before precedence
+  // moves to the next tier - a tier with only one state set must still beat
+  // a lower tier's same-state image, not lose to it.
+  function tierValue(silentVal, speakingVal) {
+    const primary = isSpeaking ? speakingVal : silentVal;
+    const fallback = isSpeaking ? silentVal : speakingVal;
+    return primary ?? fallback ?? null;
+  }
+
+  const friendValue = profile.isFriendOverride ? tierValue(profile.avatarSilent, profile.avatarSpeaking) : null;
+  const broadcastValue = tierValue(customAvatarSilentURL, customAvatarSpeakingURL);
+  const defaultValue = profile.isFriendOverride ? null : tierValue(profile.avatarSilent, profile.avatarSpeaking);
+
   return {
-    avatarSrc,
-    usernameColor: profile.usernameColor ?? null,
-    chatColor: profile.chatColor ?? null,
+    avatarSrc: friendValue ?? broadcastValue ?? defaultValue ?? discordAvatarURL,
+    usernameColor,
+    chatColor,
   };
 }

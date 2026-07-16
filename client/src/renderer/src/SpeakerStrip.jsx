@@ -53,6 +53,10 @@ export default function SpeakerStrip({ roster, speakingIds, avatarMode, avatarSi
           isSpeaking,
           discordAvatarURL: member.avatarURL,
           profile: profileBySpeaker[member.speakerId] ?? EMPTY_PROFILE,
+          customAvatarSilentURL: member.customAvatarSilentURL,
+          customAvatarSpeakingURL: member.customAvatarSpeakingURL,
+          broadcastUsernameColor: member.usernameColor,
+          broadcastChatColor: member.chatColor,
         });
         return (
           <div key={member.speakerId} className={`speaker speaker--${avatarSize}`}>
