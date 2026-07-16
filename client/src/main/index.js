@@ -921,7 +921,11 @@ function transitionToLauncher() {
 function setupAutoUpdater() {
   const betaUpdates = store.get('betaUpdates');
   autoUpdater.allowPrerelease = betaUpdates;
-  autoUpdater.channel = betaUpdates ? 'beta' : null;
+  // Must be a non-null override: electron-updater resolves the channel as
+  // `updater.channel || options.channel`, so `null` falls through to whatever
+  // channel was baked into this install's app-update.yml at build time (e.g.
+  // 'beta' for builds from the beta pipeline), instead of forcing 'latest'.
+  autoUpdater.channel = betaUpdates ? 'beta' : 'latest';
 
   autoUpdater.on('update-not-available', () => {
     transitionToLauncher();
