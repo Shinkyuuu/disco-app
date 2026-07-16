@@ -15,6 +15,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { isNearBottom } from './isNearBottom';
+
+// How close to the bottom (in px) the user has to be for a new transcript to
+// auto-scroll them the rest of the way. Anything further and they're treated
+// as intentionally reading scrollback, so new messages append without moving
+// their view.
+const STICK_TO_BOTTOM_THRESHOLD_PX = 30;
 
 // A message is fully visible for MESSAGE_VISIBLE_MS, then fades out over
 // MESSAGE_FADE_MS (CSS transition in app.css) before actually being removed.
@@ -52,14 +59,22 @@ function MessageLine({ entry, colors = {}, chatSize = 'medium' }) {
 }
 
 export default function MessageLog({ entries, colorBySpeaker = {}, chatSize = 'medium' }) {
+  const containerRef = useRef(null);
   const bottomRef = useRef(null);
+  const stickToBottomRef = useRef(true);
+
+  const handleScroll = () => {
+    stickToBottomRef.current = isNearBottom(containerRef.current, STICK_TO_BOTTOM_THRESHOLD_PX);
+  };
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [entries]);
 
   return (
-    <div className="message-log">
+    <div className="message-log" ref={containerRef} onScroll={handleScroll}>
       {entries.map((entry) => (
         <MessageLine
           key={`${entry.speakerId}-${entry.receivedAt}`}
