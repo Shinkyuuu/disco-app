@@ -17,9 +17,10 @@
 import 'dotenv/config';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
-import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken } from './auth.js';
-import { getLiveSessionForUser, getUserProfile } from './bot.js';
+import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
+import { getLiveSessionForUser, getUserProfile, rebroadcastRosterIfLive } from './bot.js';
 import { getSession } from './sessionRegistry.js';
+import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -31,6 +32,10 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/auth/exchange') return handleAuthExchange(req, res);
   if (url.pathname === '/auth/icon.png') return handleAuthIcon(req, res);
   if (url.pathname === '/api/me') return handleMe(req, res);
+  if (url.pathname === '/api/avatar/upload-url') return handleAvatarUploadUrl(req, res);
+  if (url.pathname === '/api/avatar/confirm') return handleAvatarConfirm(req, res);
+  if (url.pathname === '/api/avatar/clear') return handleAvatarClear(req, res);
+  if (url.pathname === '/api/avatar/me') return handleAvatarMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found - use the Disco Electron client to view captions.');
 });
@@ -120,7 +125,131 @@ export function createMeHandler({ verifyToken, getProfile }) {
   };
 }
 
+function requireBearerUserId(req, verifyToken) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null;
+  return token ? verifyToken(token) : null;
+}
+
+export function createAvatarUploadUrlHandler({ verifyToken, requestUploadUrl }) {
+  return async function handleAvatarUploadUrl(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state or ext' }));
+      return;
+    }
+    try {
+      const result = await requestUploadUrl(userId, body.state, body.ext);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      console.error('Failed to generate avatar upload URL:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to generate upload url' }));
+    }
+  };
+}
+
+export function createAvatarConfirmHandler({ verifyToken, confirmUpload, onAvatarChanged }) {
+  return async function handleAvatarConfirm(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || typeof body.version !== 'string' || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state, version, or ext' }));
+      return;
+    }
+    try {
+      const avatarUrl = await confirmUpload(userId, body.state, body.version, body.ext);
+      onAvatarChanged?.(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ avatarUrl }));
+    } catch (err) {
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to confirm avatar upload:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to confirm avatar upload' }));
+    }
+  };
+}
+
+export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarChanged }) {
+  return async function handleAvatarClear(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!ALLOWED_AVATAR_STATES.includes(body.state)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid state' }));
+      return;
+    }
+    await clearAvatar(userId, body.state);
+    onAvatarChanged?.(userId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({}));
+  };
+}
+
+export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
+  return async function handleAvatarMe(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const urls = await resolveAvatarUrls(userId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ silentURL: urls?.silentURL ?? null, speakingURL: urls?.speakingURL ?? null }));
+  };
+}
+
 const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: getUserProfile });
+const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
+const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarMe = createAvatarMeHandler({ verifyToken: verifySessionToken, resolveAvatarUrls: avatarRegistry.resolveAvatarUrls });
 
 export function createBroadcaster({ getLiveSession, clients }) {
   return function broadcastToSession(guildId, payload) {

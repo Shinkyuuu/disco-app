@@ -18,6 +18,17 @@ import { useState } from 'react';
 import ProfileFieldsEditor from './ProfileFieldsEditor';
 import { colorsOf } from './profileColors';
 
+// Drawn as crossed lines (not a "×" glyph) so it sits pixel-centered in the
+// button regardless of font metrics - see TitleBar.jsx's CloseIcon.
+function RemoveIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1.4" />
+      <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
 export default function FriendOverridesSection({ friends, onChange }) {
   const [newId, setNewId] = useState('');
 
@@ -36,7 +47,7 @@ export default function FriendOverridesSection({ friends, onChange }) {
 
   return (
     <>
-      <h3 className="settings-heading settings-heading--profile">Friend Overrides</h3>
+      <h3 className="settings-heading">Friend Overrides</h3>
       <section className="settings-section">
         <div className="friend-cards">
           {Object.entries(friends).map(([userId, profile]) => (
@@ -46,7 +57,7 @@ export default function FriendOverridesSection({ friends, onChange }) {
                 aria-label="Remove friend profile"
                 onClick={() => update(() => window.api.removeFriendProfile(userId))}
               >
-                Remove
+                <RemoveIcon />
               </button>
               <div className="friend-id">{userId}</div>
               <ProfileFieldsEditor

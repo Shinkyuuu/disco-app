@@ -19,6 +19,7 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseAuthCode, parseAuthError } from './protocolUrl.js';
 import { exchangeAuthCode } from './authClient.js';
@@ -49,7 +50,16 @@ import {
   setFriendProfileColors,
   removeFriendProfile,
   slotDirName,
+  pickImageFileForBroadcast,
+  MIME_BY_EXT,
 } from './profiles.js';
+import {
+  requestAvatarUploadUrl,
+  confirmAvatarUpload,
+  clearBroadcastAvatar as clearBroadcastAvatarRemote,
+  uploadFileToPresignedUrl,
+  getBroadcastAvatarUrls,
+} from './avatarClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'disco';
@@ -759,6 +769,33 @@ function registerIpcHandlers() {
     setFriendProfileColors(store, userId, colors),
   );
   ipcMain.handle('remove-friend-profile', (_event, userId) => removeFriendProfile(store, userId));
+
+  ipcMain.handle('upload-broadcast-avatar', async (_event, kind) => {
+    const picked = await pickImageFileForBroadcast(kind);
+    if (!picked) return null;
+    const { filePath, ext } = picked;
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+
+    const { uploadUrl, version } = await requestAvatarUploadUrl({ serverAddress: SERVER_ADDRESS, token, state: kind, ext });
+    const fileBuffer = fs.readFileSync(filePath);
+    const contentType = MIME_BY_EXT[`.${ext}`] ?? 'application/octet-stream';
+    await uploadFileToPresignedUrl({ uploadUrl, fileBuffer, contentType });
+    const { avatarUrl } = await confirmAvatarUpload({ serverAddress: SERVER_ADDRESS, token, state: kind, version, ext });
+    return avatarUrl;
+  });
+
+  ipcMain.handle('clear-broadcast-avatar', async (_event, kind) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+    await clearBroadcastAvatarRemote({ serverAddress: SERVER_ADDRESS, token, state: kind });
+  });
+
+  ipcMain.handle('get-broadcast-avatar', async () => {
+    const token = store.get('sessionToken');
+    if (!token) return { silentURL: null, speakingURL: null };
+    return getBroadcastAvatarUrls({ serverAddress: SERVER_ADDRESS, token });
+  });
 
   ipcMain.handle('resize-window', (event, { width, height }) => {
     BrowserWindow.fromWebContents(event.sender)?.setSize(width, height);

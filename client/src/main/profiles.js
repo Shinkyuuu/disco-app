@@ -21,7 +21,7 @@ import path from 'node:path';
 const { app, dialog } = electron;
 
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
-const MIME_BY_EXT = {
+export const MIME_BY_EXT = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -123,13 +123,21 @@ export function reconcileFriendProfiles(store) {
   if (changed) store.set('friendProfiles', friendProfiles);
 }
 
+// The logged-in user's own entry in friendProfiles (created by the removed
+// "Your Profile" UI, or by setting colors via Public Avatar) must never
+// surface as an avatar-image override: resolveAppearance.js ranks a friend
+// override above the broadcast/Public Avatar tier, which would let a stale
+// local image permanently outrank a newly-set Public Avatar for yourself.
+// Colors are unaffected - only the avatar images are suppressed for self.
 export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
+  const isSelf = speakerId === store.get('loggedInUserId');
   const friend = store.get('friendProfiles')[speakerId];
   if (friend) {
     return {
-      ...readImagesFor('friend', speakerId),
+      ...(isSelf ? { avatarSilent: null, avatarSpeaking: null } : readImagesFor('friend', speakerId)),
       usernameColor: friend.usernameColor ?? null,
       chatColor: friend.chatColor ?? null,
+      isFriendOverride: !isSelf,
     };
   }
   if (slotIndex >= 0 && slotIndex < 10) {
@@ -138,9 +146,10 @@ export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
       ...readImagesFor('default', slotDirName(slotIndex)),
       usernameColor: slot.usernameColor ?? null,
       chatColor: slot.chatColor ?? null,
+      isFriendOverride: false,
     };
   }
-  return { avatarSilent: null, avatarSpeaking: null, usernameColor: null, chatColor: null };
+  return { avatarSilent: null, avatarSpeaking: null, usernameColor: null, chatColor: null, isFriendOverride: false };
 }
 
 export function getDefaultProfiles(store) {
@@ -165,17 +174,27 @@ export function getFriendProfiles(store) {
   return result;
 }
 
-export async function pickAvatarImage({ scope, id, kind }) {
+// Shared by pickAvatarImage (local overrides, copies the file into userData)
+// and pickImageFileForBroadcast (server upload, doesn't copy anywhere locally
+// - the caller reads the bytes directly from the returned filePath).
+async function pickAndValidateImageFile(title) {
   const { canceled, filePaths } = await dialog.showOpenDialog({
-    title: `Choose ${kind} avatar image`,
+    title,
     properties: ['openFile'],
     filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS.map((e) => e.slice(1)) }],
   });
   if (canceled || filePaths.length === 0) return null;
-
-  const source = filePaths[0];
-  const ext = path.extname(source).toLowerCase();
+  const filePath = filePaths[0];
+  const ext = path.extname(filePath).toLowerCase();
   if (!IMAGE_EXTENSIONS.includes(ext)) return null;
+  return { filePath, ext: ext.slice(1) }; // ext without the leading dot, matching the server's ALLOWED_AVATAR_EXTENSIONS
+}
+
+export async function pickAvatarImage({ scope, id, kind }) {
+  const picked = await pickAndValidateImageFile(`Choose ${kind} avatar image`);
+  if (!picked) return null;
+  const { filePath: source, ext: extNoDot } = picked;
+  const ext = `.${extNoDot}`;
 
   const dir = scopeDir(userAvatarsRoot(), scope, id);
   fs.mkdirSync(dir, { recursive: true });
@@ -186,6 +205,14 @@ export async function pickAvatarImage({ scope, id, kind }) {
   }
   fs.copyFileSync(source, path.join(dir, `${kind}${ext}`));
   return readAvatarDataUrl(scope, id, kind);
+}
+
+// Picks a file for the server-broadcast avatar flow - just validates and
+// returns its path/extension, doesn't copy it anywhere. The caller (see
+// main/index.js's upload-broadcast-avatar IPC handler) reads the bytes
+// itself to hand off to avatarClient.js.
+export async function pickImageFileForBroadcast(kind) {
+  return pickAndValidateImageFile(`Choose ${kind} avatar image to share with others`);
 }
 
 export function clearAvatarImage({ scope, id, kind }) {

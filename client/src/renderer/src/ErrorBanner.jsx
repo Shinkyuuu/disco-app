@@ -14,6 +14,17 @@
  * limitations under the License.
  */
 
+// Drawn as crossed lines (not a "×" glyph) so it sits pixel-centered in the
+// button regardless of font metrics - see TitleBar.jsx's CloseIcon.
+function CloseIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1.4" />
+      <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
 // Absolutely positioned below the title bar (see .error-banner in app.css) so
 // it overlays without shifting any other component's position. The parent
 // controls the auto-dismiss timer and mounts/unmounts this - a fresh mount
@@ -25,7 +36,7 @@ export default function ErrorBanner({ message, onDismiss }) {
     <div className="error-banner" role="alert">
       <p>{message}</p>
       <button className="error-banner-close" aria-label="Dismiss" onClick={onDismiss}>
-        ×
+        <CloseIcon />
       </button>
     </div>
   );
