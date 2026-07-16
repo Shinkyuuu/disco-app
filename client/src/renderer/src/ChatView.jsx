@@ -21,6 +21,7 @@ import WindowMenu from './WindowMenu';
 import ChatStatusBanner from './ChatStatusBanner';
 import { resolveFontOption, resolveBorderOption, DEFAULT_FONT_ID, DEFAULT_BORDER_ID } from './chatAppearanceOptions';
 import { mergeEntries } from './mergeEntries';
+import { resolveProfileColors } from './resolveAppearance';
 
 // Every non-connected status this component ever shows, all through the same
 // inline banner (see ChatStatusBanner) - no native dialog, no full-panel
@@ -70,6 +71,12 @@ export default function ChatView() {
   // counter only advances for non-friends - which requires knowing the friend
   // set before assigning slots (loaded once into friendIds).
   const [profileBySpeaker, setProfileBySpeaker] = useState({});
+
+  // speakerId -> last-known { usernameColor, chatColor } broadcast by that
+  // speaker via the roster. Accumulated the same way as profileBySpeaker
+  // (never dropped when a member leaves the roster) so colorBySpeaker below
+  // stays correct for messages from a speaker who has since left.
+  const [broadcastColorBySpeaker, setBroadcastColorBySpeaker] = useState({});
   const [friendIds, setFriendIds] = useState(null); // null = not loaded yet
   const requestedRef = useRef(new Set());
   const slotCounterRef = useRef(0);
@@ -91,6 +98,16 @@ export default function ChatView() {
       });
     }
   }, [roster, friendIds]);
+
+  useEffect(() => {
+    setBroadcastColorBySpeaker((prev) => {
+      const next = { ...prev };
+      for (const member of roster) {
+        next[member.speakerId] = { usernameColor: member.usernameColor ?? null, chatColor: member.chatColor ?? null };
+      }
+      return next;
+    });
+  }, [roster]);
 
   useEffect(() => {
     window.api.getSettings().then(setSettings);
@@ -155,7 +172,14 @@ export default function ChatView() {
   const fontOption = resolveFontOption(settings?.chatFontFamily ?? DEFAULT_FONT_ID);
   const borderOption = resolveBorderOption(settings?.chatBorderStyle ?? DEFAULT_BORDER_ID);
   const colorBySpeaker = Object.fromEntries(
-    Object.entries(profileBySpeaker).map(([id, p]) => [id, { usernameColor: p.usernameColor, chatColor: p.chatColor }]),
+    Object.entries(profileBySpeaker).map(([id, profile]) => {
+      const broadcast = broadcastColorBySpeaker[id] ?? {};
+      return [id, resolveProfileColors({
+        profile,
+        broadcastUsernameColor: broadcast.usernameColor,
+        broadcastChatColor: broadcast.chatColor,
+      })];
+    }),
   );
 
   return (

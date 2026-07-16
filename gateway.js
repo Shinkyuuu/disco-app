@@ -20,7 +20,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
 import { getLiveSessionForUser, getUserProfile, rebroadcastRosterIfLive } from './bot.js';
 import { getSession } from './sessionRegistry.js';
-import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
+import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -35,6 +35,7 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/api/avatar/upload-url') return handleAvatarUploadUrl(req, res);
   if (url.pathname === '/api/avatar/confirm') return handleAvatarConfirm(req, res);
   if (url.pathname === '/api/avatar/clear') return handleAvatarClear(req, res);
+  if (url.pathname === '/api/avatar/colors') return handleAvatarColors(req, res);
   if (url.pathname === '/api/avatar/me') return handleAvatarMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found - use the Disco Electron client to view captions.');
@@ -231,6 +232,45 @@ export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarCha
   };
 }
 
+export function createAvatarColorsHandler({ verifyToken, setProfileColors, onAvatarChanged }) {
+  return async function handleAvatarColors(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!isValidHexColor(body.usernameColor) || !isValidHexColor(body.chatColor)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid usernameColor or chatColor' }));
+      return;
+    }
+    try {
+      const colors = await setProfileColors(userId, { usernameColor: body.usernameColor, chatColor: body.chatColor });
+      onAvatarChanged?.(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(colors));
+    } catch (err) {
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to set profile colors:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to set profile colors' }));
+    }
+  };
+}
+
 export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
   return async function handleAvatarMe(req, res) {
     const userId = requireBearerUserId(req, verifyToken);
@@ -249,6 +289,7 @@ const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: 
 const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
 const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarColors = createAvatarColorsHandler({ verifyToken: verifySessionToken, setProfileColors: avatarRegistry.setProfileColors, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarMe = createAvatarMeHandler({ verifyToken: verifySessionToken, resolveAvatarUrls: avatarRegistry.resolveAvatarUrls });
 
 export function createBroadcaster({ getLiveSession, clients }) {

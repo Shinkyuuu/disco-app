@@ -64,6 +64,11 @@ export async function getBroadcastAvatarUrls({ serverAddress, token, timeoutMs =
   return getJson(`${scheme}://${serverAddress}/api/avatar/me`, { token, timeoutMs });
 }
 
+export async function setPublicColors({ serverAddress, token, usernameColor, chatColor, timeoutMs = 5000 }) {
+  const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
+  return postJson(`${scheme}://${serverAddress}/api/avatar/colors`, { token, body: { usernameColor, chatColor }, timeoutMs });
+}
+
 export async function uploadFileToPresignedUrl({ uploadUrl, fileBuffer, contentType, timeoutMs = 15000 }) {
   const res = await fetch(uploadUrl, {
     method: 'PUT',

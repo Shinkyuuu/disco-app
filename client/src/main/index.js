@@ -59,6 +59,7 @@ import {
   clearBroadcastAvatar as clearBroadcastAvatarRemote,
   uploadFileToPresignedUrl,
   getBroadcastAvatarUrls,
+  setPublicColors,
 } from './avatarClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -789,6 +790,12 @@ function registerIpcHandlers() {
     const token = store.get('sessionToken');
     if (!token) throw new Error('Not logged in');
     await clearBroadcastAvatarRemote({ serverAddress: SERVER_ADDRESS, token, state: kind });
+  });
+
+  ipcMain.handle('set-public-colors', async (_event, { usernameColor, chatColor }) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+    return setPublicColors({ serverAddress: SERVER_ADDRESS, token, usernameColor, chatColor });
   });
 
   ipcMain.handle('get-broadcast-avatar', async () => {

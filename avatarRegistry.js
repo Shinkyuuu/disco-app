@@ -26,6 +26,12 @@ export const ALLOWED_AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5MB
 const UPLOAD_URL_TTL_SECONDS = 300; // 5 minutes
 
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+export function isValidHexColor(value) {
+  return value === null || HEX_COLOR_RE.test(value);
+}
+
 function manifestKey(userId) {
   return `avatars/${userId}/manifest.json`;
 }
@@ -64,7 +70,13 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return {
       silentURL: urlFor(userId, manifest, 'silent'),
       speakingURL: urlFor(userId, manifest, 'speaking'),
+      usernameColor: manifest?.usernameColor ?? null,
+      chatColor: manifest?.chatColor ?? null,
     };
+  }
+
+  function hasAnyProfileData(urls) {
+    return Boolean(urls.silentURL || urls.speakingURL || urls.usernameColor || urls.chatColor);
   }
 
   async function readManifest(userId) {
@@ -125,6 +137,21 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return urls[`${state}URL`];
   }
 
+  async function setProfileColors(userId, { usernameColor, chatColor }) {
+    if (!isValidHexColor(usernameColor) || !isValidHexColor(chatColor)) {
+      throw new AvatarValidationError('Invalid color - expected #rrggbb or null');
+    }
+    const manifest = (await readManifest(userId)) ?? {};
+    manifest.usernameColor = usernameColor;
+    manifest.chatColor = chatColor;
+    manifest.updatedAt = Date.now();
+    await writeManifest(userId, manifest);
+
+    const urls = urlsFromManifest(userId, manifest);
+    registry.set(userId, hasAnyProfileData(urls) ? urls : null);
+    return { usernameColor: urls.usernameColor, chatColor: urls.chatColor };
+  }
+
   function getCachedAvatarUrls(userId) {
     return registry.get(userId);
   }
@@ -149,10 +176,10 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     await writeManifest(userId, manifest);
 
     const urls = urlsFromManifest(userId, manifest);
-    registry.set(userId, urls.silentURL || urls.speakingURL ? urls : null);
+    registry.set(userId, hasAnyProfileData(urls) ? urls : null);
   }
 
-  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar };
+  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar, setProfileColors };
 }
 
 const { AWS_REGION, S3_AVATAR_BUCKET, AVATAR_CDN_BASE_URL } = process.env;
