@@ -22,6 +22,7 @@ import {
   Routes,
   Events,
   ApplicationCommandOptionType,
+  GatewayRateLimitError,
 } from 'discord.js';
 import {
   joinVoiceChannel,
@@ -69,7 +70,7 @@ export function extractFluxTranscript(msg) {
 // v2/listen rejects a 'channels' query param outright (400 INVALID_QUERY_PARAMETER) -
 // Flux only accepts mono audio, so it isn't a configurable value like on v1/listen.
 // The decoder below still emits mono PCM to match what Flux expects on the wire.
-const DEEPGRAM_URL = 'wss://api.deepgram.com/v2/listen?encoding=linear16&sample_rate=48000&model=flux-general-en';
+const DEEPGRAM_URL = 'wss://api.deepgram.com/v2/listen?encoding=linear16&sample_rate=48000&model=flux-general-en&eot_timeout_ms=2000';
 
 const commands = [
   {
@@ -115,13 +116,23 @@ client.on(Events.Error, (err) => {
 // so each guild's full member list is fetched once, the first time it's actually needed,
 // rather than eagerly for every guild the bot happens to be invited to.
 const fetchedGuilds = new Set();
-async function ensureMembersFetched(guild) {
+// Discord's gateway rate-limits the underlying Request Guild Members opcode across
+// the whole shard connection, so a rate-limited guild will fail again immediately if
+// retried before its retry_after window elapses - this map tracks that per guild.
+const memberFetchRetryAt = new Map();
+export async function ensureMembersFetched(guild) {
   if (fetchedGuilds.has(guild.id)) return;
+  const retryAt = memberFetchRetryAt.get(guild.id);
+  if (retryAt && Date.now() < retryAt) return;
   try {
     await guild.members.fetch();
     fetchedGuilds.add(guild.id);
+    memberFetchRetryAt.delete(guild.id);
   } catch (err) {
     console.error(`Failed to fetch members for guild ${guild.id}:`, err);
+    if (err instanceof GatewayRateLimitError) {
+      memberFetchRetryAt.set(guild.id, Date.now() + err.data.retry_after * 1000);
+    }
   }
 }
 
@@ -371,7 +382,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
   // time, so with no more bytes flowing its internal clock never advances and the
   // in-progress turn's transcript is silently discarded when the connection closes.
   // Feeding real silence PCM here lets Flux's own turn detection (or its eot_timeout_ms
-  // fallback, 5s by default) actually finalize the turn before we close.
+  // fallback, 2s per DEEPGRAM_URL) actually finalize the turn before we close.
   const startPadding = () => {
     windingDown = true;
     const silenceFrame = Buffer.alloc(960 * 2); // 20ms of mono 48kHz linear16 silence
@@ -379,7 +390,7 @@ async function startTranscribing(guildId, channelId, connection, userId) {
     const giveUp = setTimeout(() => {
       stopPadding();
       dgSocket.close();
-    }, 6000); // covers Flux's default 5s eot_timeout_ms plus margin
+    }, 3000); // covers the 2s eot_timeout_ms plus margin
     stopPadding = () => {
       clearInterval(padInterval);
       clearTimeout(giveUp);

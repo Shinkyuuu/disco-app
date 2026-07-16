@@ -17,7 +17,8 @@
 import 'dotenv/config';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveMaxActiveSessions, extractFluxTranscript } from './bot.js';
+import { GatewayRateLimitError } from 'discord.js';
+import { resolveMaxActiveSessions, extractFluxTranscript, ensureMembersFetched } from './bot.js';
 
 test('resolveMaxActiveSessions defaults to 5 when unset', () => {
   assert.equal(resolveMaxActiveSessions(undefined), 5);
@@ -53,4 +54,30 @@ test('extractFluxTranscript ignores non-TurnInfo messages (e.g. Connected, Error
 test('extractFluxTranscript returns null for an EndOfTurn with an empty transcript', () => {
   const msg = { type: 'TurnInfo', event: 'EndOfTurn', transcript: '' };
   assert.equal(extractFluxTranscript(msg), null);
+});
+
+test('ensureMembersFetched does not retry a guild while its rate-limit cooldown is active', async () => {
+  let calls = 0;
+  const guild = {
+    id: `rate-limited-guild-${Date.now()}`,
+    members: {
+      fetch: async () => {
+        calls++;
+        if (calls === 1) {
+          throw new GatewayRateLimitError({ retry_after: 0.1, opcode: 8, meta: {} }, {});
+        }
+      },
+    },
+  };
+
+  await ensureMembersFetched(guild);
+  assert.equal(calls, 1);
+
+  await ensureMembersFetched(guild);
+  assert.equal(calls, 1, 'should not retry while the rate-limit retry_after window is still active');
+
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  await ensureMembersFetched(guild);
+  assert.equal(calls, 2, 'should retry once the retry_after window has elapsed');
 });
