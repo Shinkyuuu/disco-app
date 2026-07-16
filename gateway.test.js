@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler, createAvatarColorsHandler } from './gateway.js';
 import { AvatarValidationError } from './avatarRegistry.js';
 
 function startTestServer(gateOptions) {
@@ -353,6 +353,94 @@ test('GET /api/avatar/me returns 401 for an invalid token', async () => {
   const { server, port } = await startTestHttpServer(handler);
   const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer bad-token' } });
   assert.equal(res.status, 401);
+  server.close();
+});
+
+test('POST /api/avatar/colors returns 200 with the written colors and notifies onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarColorsHandler({
+    verifyToken: () => 'user-1',
+    setProfileColors: async (userId, colors) => ({ ...colors }),
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/colors`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameColor: '#ff0000', chatColor: null }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body, { usernameColor: '#ff0000', chatColor: null });
+  assert.deepEqual(changed, ['user-1']);
+  server.close();
+});
+
+test('POST /api/avatar/colors returns 400 for a malformed color and does not notify onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarColorsHandler({
+    verifyToken: () => 'user-1',
+    setProfileColors: async () => { throw new Error('should not be called'); },
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/colors`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameColor: 'not-a-color', chatColor: null }),
+  });
+  assert.equal(res.status, 400);
+  assert.deepEqual(changed, []);
+  server.close();
+});
+
+test('POST /api/avatar/colors returns 401 without a valid token, and does not notify onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarColorsHandler({
+    verifyToken: () => null,
+    setProfileColors: async () => ({}),
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/colors`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameColor: '#ff0000', chatColor: null }),
+  });
+  assert.equal(res.status, 401);
+  assert.deepEqual(changed, []);
+  server.close();
+});
+
+test('POST /api/avatar/colors returns 400 when setProfileColors rejects with a validation error', async () => {
+  const handler = createAvatarColorsHandler({
+    verifyToken: () => 'user-1',
+    setProfileColors: async () => { throw new AvatarValidationError('Invalid color'); },
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/colors`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameColor: '#ff0000', chatColor: null }),
+  });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST /api/avatar/colors returns 500 without leaking the error message on an unexpected error', async () => {
+  const handler = createAvatarColorsHandler({
+    verifyToken: () => 'user-1',
+    setProfileColors: async () => { throw new Error('network timeout'); },
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/colors`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usernameColor: '#ff0000', chatColor: null }),
+  });
+  const bodyText = await res.text();
+  assert.equal(res.status, 500);
+  assert.ok(!bodyText.includes('network timeout'));
   server.close();
 });
 

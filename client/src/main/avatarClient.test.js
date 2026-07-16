@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl, getBroadcastAvatarUrls } from './avatarClient.js';
+import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl, getBroadcastAvatarUrls, setPublicColors } from './avatarClient.js';
 
 function startTestHttpServer(handler) {
   return new Promise((resolve) => {
@@ -106,6 +106,35 @@ test('clearBroadcastAvatar posts state and resolves on success', async () => {
   });
   await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking' });
   assert.deepEqual(receivedBody, { state: 'speaking' });
+  server.close();
+});
+
+test('setPublicColors posts usernameColor/chatColor and returns the parsed response', async () => {
+  let receivedBody = null;
+  const { server, port } = await startTestHttpServer((req, res) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => {
+      receivedBody = JSON.parse(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ usernameColor: '#ff0000', chatColor: null }));
+    });
+  });
+  const result = await setPublicColors({ serverAddress: `localhost:${port}`, token: 'tok', usernameColor: '#ff0000', chatColor: null });
+  assert.deepEqual(receivedBody, { usernameColor: '#ff0000', chatColor: null });
+  assert.deepEqual(result, { usernameColor: '#ff0000', chatColor: null });
+  server.close();
+});
+
+test('setPublicColors throws AvatarUploadError on a non-ok response', async () => {
+  const { server, port } = await startTestHttpServer((req, res) => {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'invalid usernameColor or chatColor' }));
+  });
+  await assert.rejects(
+    () => setPublicColors({ serverAddress: `localhost:${port}`, token: 'tok', usernameColor: 'bad', chatColor: null }),
+    AvatarUploadError,
+  );
   server.close();
 });
 
