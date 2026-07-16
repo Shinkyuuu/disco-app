@@ -1282,6 +1282,10 @@ input {
   opacity: 0.6;
   min-width: 16px;
 }
+.slot-row .profile-fields {
+  flex: 1;
+  min-width: 0;
+}
 
 /* friend cards */
 .friend-cards {
