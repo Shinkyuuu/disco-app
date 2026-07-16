@@ -21,7 +21,7 @@
 // The dropdown itself is a fixed-width box (see .window-menu-dropdown in
 // app.css); the popup window is wider than that to leave room on the right
 // for the avatar-size/chat-size submenus, which open further right on hover.
-export const MENU_POPUP_WIDTH = 250;
+export const MENU_POPUP_WIDTH = 270;
 
 // Generously-rounded row heights matching the CSS (.window-menu-item,
 // .window-menu-slider-item) - a little too tall just leaves harmless
@@ -30,12 +30,21 @@ export const MENU_POPUP_WIDTH = 250;
 const MENU_ROW_HEIGHT = 34;
 const MENU_OPACITY_ROW_HEIGHT = 60;
 const MENU_BASE_PADDING = 8;
+// Matching .window-menu-label/.window-menu-separator in app.css - the ⋯ menu
+// groups its items under labeled sub-groups (see ChatMenuView), each of which
+// adds its own label row, and adjacent groups are divided by a separator.
+const MENU_LABEL_HEIGHT = 22;
+const MENU_SEPARATOR_HEIGHT = 9;
 
 // Which optional sections a given ⋯ menu invocation includes - mirrors which
 // props WindowMenu was given, since that already reflects the app's current
 // state (e.g. error screens pass none of these, leaving only Exit).
 export function chatMenuHeightFor(sections) {
-  let height = MENU_BASE_PADDING + MENU_ROW_HEIGHT; // Exit is always present
+  const hasChatboxGroup = sections.avatarSize || sections.chatSize || sections.opacity || sections.collapse;
+  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth;
+
+  // General (Exit) is always present, so its label always renders.
+  let height = MENU_BASE_PADDING + MENU_ROW_HEIGHT + MENU_LABEL_HEIGHT;
   if (sections.avatarSize) height += MENU_ROW_HEIGHT;
   if (sections.chatSize) height += MENU_ROW_HEIGHT;
   if (sections.opacity) height += MENU_OPACITY_ROW_HEIGHT;
@@ -43,6 +52,10 @@ export function chatMenuHeightFor(sections) {
   if (sections.collapse) height += MENU_ROW_HEIGHT;
   if (sections.lock) height += MENU_ROW_HEIGHT;
   if (sections.autoWidth) height += MENU_ROW_HEIGHT;
+  if (hasChatboxGroup) height += MENU_LABEL_HEIGHT;
+  if (hasOverlayGroup) height += MENU_LABEL_HEIGHT;
+  if (hasChatboxGroup && hasOverlayGroup) height += MENU_SEPARATOR_HEIGHT;
+  if (hasChatboxGroup || hasOverlayGroup) height += MENU_SEPARATOR_HEIGHT;
   return height;
 }
 
