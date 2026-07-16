@@ -218,6 +218,7 @@ export default function LauncherView() {
         <div className="aurora-backdrop">
           <Aurora colorStops={AURORA_COLOR_STOPS} speed={0.4} />
         </div>
+        <div className="launcher-bg-tint" />
         {page === 'settings' ? (
           <SettingsView
             settings={settings}
@@ -241,7 +242,7 @@ export default function LauncherView() {
                     <p className="launcher-kicker">Welcome back</p>
                     <ProfileHeader profile={profileState.profile} reachable={profileState.reachable} />
                     <div className="launcher-divider" />
-                    <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
+                    <BorderGlow className="launcher-cta-glow" backgroundColor="#7c6cf0" borderRadius={8} glowRadius={14}>
                       <button className="launcher-primary-btn" disabled={chatOpening} onClick={handleStartChatWindow}>
                         <ChatIcon />
                         {chatOpening ? 'Opening…' : 'Start Chat Window'}
@@ -264,7 +265,7 @@ export default function LauncherView() {
                 ) : (
                   <>
                     <p className="launcher-kicker">Get started</p>
-                    <BorderGlow className="launcher-cta-glow" backgroundColor="#6d5efc" borderRadius={8} glowRadius={14}>
+                    <BorderGlow className="launcher-cta-glow" backgroundColor="#7c6cf0" borderRadius={8} glowRadius={14}>
                       <button className="launcher-primary-btn" onClick={handleLogin}>
                         <LoginIcon />
                         Login to Discord
