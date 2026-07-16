@@ -16,9 +16,25 @@
 
 // Pure mapping from a resolved profile + current mode/speaking state to concrete
 // render values. No Electron dependency - unit-tested like backoff.js/protocolUrl.js.
-export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile, customAvatarSilentURL, customAvatarSpeakingURL }) {
+
+// Colors apply the same tier order regardless of avatarMode: a friend
+// override always wins; otherwise the speaker's own broadcast color (if
+// they've set one) beats the viewer's local default-slot color.
+export function resolveProfileColors({ profile, broadcastUsernameColor, broadcastChatColor }) {
+  const usernameColor = profile.isFriendOverride
+    ? (profile.usernameColor ?? null)
+    : (broadcastUsernameColor ?? profile.usernameColor ?? null);
+  const chatColor = profile.isFriendOverride
+    ? (profile.chatColor ?? null)
+    : (broadcastChatColor ?? profile.chatColor ?? null);
+  return { usernameColor, chatColor };
+}
+
+export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, profile, customAvatarSilentURL, customAvatarSpeakingURL, broadcastUsernameColor, broadcastChatColor }) {
+  const { usernameColor, chatColor } = resolveProfileColors({ profile, broadcastUsernameColor, broadcastChatColor });
+
   if (avatarMode === 'discord') {
-    return { avatarSrc: discordAvatarURL, usernameColor: profile.usernameColor ?? null, chatColor: profile.chatColor ?? null };
+    return { avatarSrc: discordAvatarURL, usernameColor, chatColor };
   }
 
   // profile.avatarSilent/avatarSpeaking came from resolveSpeakerProfile, which
@@ -43,7 +59,7 @@ export function resolveAppearance({ avatarMode, isSpeaking, discordAvatarURL, pr
 
   return {
     avatarSrc: friendValue ?? broadcastValue ?? defaultValue ?? discordAvatarURL,
-    usernameColor: profile.usernameColor ?? null,
-    chatColor: profile.chatColor ?? null,
+    usernameColor,
+    chatColor,
   };
 }

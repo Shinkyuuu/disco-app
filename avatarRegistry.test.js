@@ -17,7 +17,7 @@
 import 'dotenv/config';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError } from './avatarRegistry.js';
+import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
 
 function fakeS3({ objects = new Map() } = {}) {
   return {
@@ -238,4 +238,105 @@ test('clearAvatar rejects an invalid state', async () => {
     assert.match(err.message, /Invalid avatar state/);
     return true;
   });
+});
+
+test('isValidHexColor accepts null and #rrggbb, rejects anything else', () => {
+  assert.equal(isValidHexColor(null), true);
+  assert.equal(isValidHexColor('#a1b2c3'), true);
+  assert.equal(isValidHexColor('#A1B2C3'), true);
+  assert.equal(isValidHexColor('red'), false);
+  assert.equal(isValidHexColor('#fff'), false);
+  assert.equal(isValidHexColor(undefined), false);
+});
+
+test('setProfileColors writes both colors into the manifest and the in-memory cache', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  const result = await registry.setProfileColors('user-1', { usernameColor: '#ff0000', chatColor: '#00ff00' });
+
+  assert.deepEqual(result, { usernameColor: '#ff0000', chatColor: '#00ff00' });
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.usernameColor, '#ff0000');
+  assert.equal(cached.chatColor, '#00ff00');
+  assert.equal(cached.silentURL, null);
+  assert.equal(cached.speakingURL, null);
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.equal(manifest.usernameColor, '#ff0000');
+  assert.equal(manifest.chatColor, '#00ff00');
+});
+
+test('setProfileColors preserves an already-confirmed avatar image in the manifest', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+
+  await registry.setProfileColors('user-1', { usernameColor: '#123456', chatColor: null });
+
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.silentURL, 'https://cdn.example.com/avatars/user-1/aaa-silent.png');
+  assert.equal(cached.usernameColor, '#123456');
+  assert.equal(cached.chatColor, null);
+});
+
+test('confirmUpload preserves already-set colors in the manifest', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  await registry.setProfileColors('user-1', { usernameColor: '#123456', chatColor: '#654321' });
+
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.usernameColor, '#123456');
+  assert.equal(cached.chatColor, '#654321');
+  assert.equal(cached.silentURL, 'https://cdn.example.com/avatars/user-1/aaa-silent.png');
+});
+
+test('setProfileColors rejects an invalid color', async () => {
+  const registry = makeRegistry();
+  await assert.rejects(() => registry.setProfileColors('user-1', { usernameColor: 'not-a-color', chatColor: null }), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    return true;
+  });
+});
+
+test('resolveAvatarUrls surfaces colors for a user read fresh from S3 with no avatar images', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-2/manifest.json', {
+    body: JSON.stringify({ usernameColor: '#aabbcc', chatColor: '#112233' }),
+  });
+
+  const urls = await registry.resolveAvatarUrls('user-2');
+
+  assert.equal(urls.usernameColor, '#aabbcc');
+  assert.equal(urls.chatColor, '#112233');
+  assert.equal(urls.silentURL, null);
+});
+
+test('clearAvatar does not wipe out colors when only an avatar image is cleared', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+  await registry.setProfileColors('user-1', { usernameColor: '#ff00ff', chatColor: null });
+
+  await registry.clearAvatar('user-1', 'silent');
+
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.silentURL, null);
+  assert.equal(cached.usernameColor, '#ff00ff');
+});
+
+test('clearAvatar still caches null once avatar images AND colors are both empty', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+
+  await registry.clearAvatar('user-1', 'silent');
+
+  assert.equal(registry.getCachedAvatarUrls('user-1'), null);
 });

@@ -152,6 +152,8 @@ function broadcastAvatarFields(member) {
   const fields = {};
   if (cached?.silentURL) fields.customAvatarSilentURL = cached.silentURL;
   if (cached?.speakingURL) fields.customAvatarSpeakingURL = cached.speakingURL;
+  if (cached?.usernameColor) fields.usernameColor = cached.usernameColor;
+  if (cached?.chatColor) fields.chatColor = cached.chatColor;
   return fields;
 }
 

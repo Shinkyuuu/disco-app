@@ -20,8 +20,10 @@ import ColorField from './ColorField';
 import { colorsOf } from './profileColors';
 
 // Uploads/clears the avatar broadcast to OTHER viewers (server-backed, via
-// AWS S3/CloudFront). Colors below are local-only (never broadcast) - same
-// storage/IPC as any other profile's colors, just edited from this section.
+// AWS S3/CloudFront). Colors below are broadcast the same way - every write
+// updates both the local friendProfiles entry (so the local user's own view
+// updates immediately) and the server-side manifest (so other viewers see it
+// too, unless they've set their own friend override for this user).
 export default function PublicAvatarSection({ loggedInUserId, profile, onChange }) {
   const [images, setImages] = useState({ silent: null, speaking: null });
   const [error, setError] = useState(null);
@@ -76,7 +78,14 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
   const currentColors = profile ?? { usernameColor: null, chatColor: null };
 
   async function updateColor(field, value) {
-    await window.api.setFriendProfileColors(loggedInUserId, { ...colorsOf(currentColors), [field]: value });
+    const next = { ...colorsOf(currentColors), [field]: value };
+    setError(null);
+    await window.api.setFriendProfileColors(loggedInUserId, next);
+    try {
+      await window.api.setPublicColors(next);
+    } catch (err) {
+      setError(`Failed to broadcast color: ${err.message}`);
+    }
     onChange();
   }
 
