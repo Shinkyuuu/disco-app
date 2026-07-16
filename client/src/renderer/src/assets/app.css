@@ -323,6 +323,7 @@ select {
 
 .error-banner p {
   margin: 0;
+  padding-left: 12px;
   flex: 1;
 }
 
@@ -652,6 +653,7 @@ select {
 
 .chat-status-banner p {
   margin: 0;
+  padding-left: 12px;
   flex: 1;
 }
 
@@ -686,7 +688,9 @@ select {
   position: relative;
   flex: 1;
   min-height: 0;
-  z-index: 1;
+  z-index: 3; /* above .chat-status-banner (z-index: 2), which otherwise escapes
+                 .chat-header's non-isolated stacking context and covers the
+                 .window-menu button that lives inside this panel */
   background: #0d0e11;
   border: var(--chat-border-width, 5px) solid #ffffff;
   border-radius: var(--chat-border-radius, 0);
