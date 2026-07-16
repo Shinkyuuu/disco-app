@@ -22,20 +22,23 @@ export default function AvatarField({ label, src, onPick, onClear, busy = false 
   return (
     <div className="pf-field">
       <span className="pf-label">{label}</span>
-      {src ? (
-        <img
-          className={`pf-avatar ${busy ? 'pf-avatar--busy' : ''}`.trim()}
-          src={src}
-          alt={label}
-        />
-      ) : (
-        <div
-          className={`pf-avatar pf-avatar--empty ${busy ? 'pf-avatar--busy' : ''}`.trim()}
-          aria-hidden="true"
-        >
-          +
-        </div>
-      )}
+      <div className="pf-avatar-wrap">
+        {src ? (
+          <img
+            className={`pf-avatar ${busy ? 'pf-avatar--busy' : ''}`.trim()}
+            src={src}
+            alt={label}
+          />
+        ) : (
+          <div
+            className={`pf-avatar pf-avatar--empty ${busy ? 'pf-avatar--busy' : ''}`.trim()}
+            aria-hidden="true"
+          >
+            {!busy && '+'}
+          </div>
+        )}
+        {busy && <span className="pf-avatar-spinner" aria-hidden="true" />}
+      </div>
       <div className="pf-actions">
         <button className="pf-btn" onClick={onPick} disabled={busy}>
           {src ? 'Change' : 'Add'}
