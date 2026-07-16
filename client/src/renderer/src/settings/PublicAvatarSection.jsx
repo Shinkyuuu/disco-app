@@ -39,7 +39,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
   if (!loggedInUserId) {
     return (
       <>
-        <h3 className="settings-heading settings-heading--profile">Public Avatar</h3>
+        <h3 className="settings-heading">Public Avatar</h3>
         <section className="settings-section your-profile your-profile--disabled">
           <p className="settings-subtext">Log in to configure the avatar other viewers see.</p>
         </section>
@@ -82,7 +82,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
 
   return (
     <>
-      <h3 className="settings-heading settings-heading--profile">Public Avatar</h3>
+      <h3 className="settings-heading">Public Avatar</h3>
       <section className="settings-section your-profile">
         <p className="settings-subtext">Shown to other viewers in shared voice channels (custom avatar mode only).</p>
         <div className="profile-fields profile-fields--card">

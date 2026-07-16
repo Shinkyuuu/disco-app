@@ -20,6 +20,7 @@ import FriendOverridesSection from './FriendOverridesSection';
 import PublicAvatarSection from './PublicAvatarSection';
 import ChatAppearanceSection from './ChatAppearanceSection';
 import ToggleSwitch from './ToggleSwitch';
+import Select from './Select';
 import { resolveFontOption, DEFAULT_FONT_ID } from '../chatAppearanceOptions';
 
 export default function SettingsView({ settings, onSettingsChange, onBack }) {
@@ -57,10 +58,14 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
         <section className="settings-section">
           <label className="settings-field">
             Avatar mode
-            <select value={settings.avatarMode} onChange={(e) => onSettingsChange({ avatarMode: e.target.value }, true)}>
-              <option value="discord">Discord avatar</option>
-              <option value="custom">Custom image</option>
-            </select>
+            <Select
+              value={settings.avatarMode}
+              onChange={(value) => onSettingsChange({ avatarMode: value }, true)}
+              options={[
+                { value: 'discord', label: 'Discord avatar' },
+                { value: 'custom', label: 'Custom image' },
+              ]}
+            />
           </label>
         </section>
 

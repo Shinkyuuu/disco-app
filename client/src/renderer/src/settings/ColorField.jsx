@@ -23,6 +23,17 @@ import { useEffect, useRef, useState } from 'react';
 // instant while debouncing which value actually gets committed upstream.
 const COLOR_COMMIT_DEBOUNCE_MS = 200;
 
+// Drawn as crossed lines (not a "+" glyph) so it sits pixel-centered in the
+// swatch regardless of font metrics - see FriendOverridesSection.jsx's RemoveIcon.
+function PlusIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+      <line x1="5" y1="0" x2="5" y2="10" stroke="currentColor" strokeWidth="1.6" />
+      <line x1="0" y1="5" x2="10" y2="5" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
 export default function ColorField({ label, value, onSet, onClear, exampleText, exampleClassName }) {
   const [localValue, setLocalValue] = useState(value);
   // Render-phase state adjustment (not an effect) for "local state should reset
@@ -49,7 +60,7 @@ export default function ColorField({ label, value, onSet, onClear, exampleText, 
         className={`pf-swatch ${localValue ? '' : 'pf-swatch--empty'}`.trim()}
         style={localValue ? { background: localValue } : undefined}
       >
-        {!localValue && <span aria-hidden="true">+</span>}
+        {!localValue && <PlusIcon />}
         <input
           className="pf-color-input"
           type="color"

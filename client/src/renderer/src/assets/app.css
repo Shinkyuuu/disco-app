@@ -40,8 +40,7 @@ body {
 }
 
 button,
-input,
-select {
+input {
   font: inherit;
 }
 
@@ -92,17 +91,12 @@ button:hover {
   background: #26272d;
 }
 
-input,
-select {
+input {
   background: #26272d;
   color: inherit;
   border: none;
   border-radius: 6px;
   padding: 4px 8px;
-}
-
-select {
-  border: 1px solid rgba(124, 108, 227, 0.4);
 }
 
 /* --- window menu (⋯ with Exit dropdown) --- */
@@ -329,8 +323,13 @@ select {
 
 .error-banner-close {
   flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
-  line-height: 1;
 }
 
 .error-banner-close:hover {
@@ -856,7 +855,7 @@ select {
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
-  padding: 24px 24px 32px;
+  padding: 24px 24px 64px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -870,6 +869,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-left: 12px;
 }
 
 .settings-toggle-row {
@@ -882,6 +882,7 @@ select {
 
 .settings-heading {
   margin: 0;
+  margin-top: 16px;
   font-size: 15px;
   font-weight: 700;
   text-transform: uppercase;
@@ -890,17 +891,29 @@ select {
   opacity: 1;
 }
 
-.settings-heading--profile {
-  padding-left: 16px; /* matches the padding of the profile boxes below it */
+.settings-scroll > .settings-heading:first-child {
+  margin-top: 0;
 }
 
 .settings-collapsible > summary.settings-heading {
+  position: relative;
   cursor: pointer;
-  list-style: revert;
+  list-style: none;
 }
 
-.settings-collapsible > summary.settings-heading::marker {
+.settings-collapsible > summary.settings-heading::-webkit-details-marker {
+  display: none;
+}
+
+.settings-collapsible > summary.settings-heading::before {
+  content: '▸';
+  position: absolute;
+  left: -14px;
   color: #b3a6ff;
+}
+
+.settings-collapsible[open] > summary.settings-heading::before {
+  content: '▾';
 }
 
 .settings-collapsible[open] > summary.settings-heading {
@@ -920,6 +933,65 @@ select {
   font-size: 14px;
   font-weight: 400;
   margin-bottom: 8px;
+}
+
+.settings-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  background: #26272d;
+  color: inherit;
+  border: 1px solid rgba(124, 108, 227, 0.4);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-select-trigger:hover {
+  background: #2c2d34;
+}
+
+.settings-select-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.settings-select-trigger[data-state='open'] .settings-select-icon {
+  transform: rotate(180deg);
+}
+
+.settings-select-content {
+  width: var(--radix-select-trigger-width);
+  overflow: hidden;
+  background: #26272d;
+  border: 1px solid rgba(124, 108, 227, 0.4);
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+}
+
+.settings-select-viewport {
+  padding: 4px;
+}
+
+.settings-select-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+}
+
+.settings-select-item[data-highlighted] {
+  background: rgba(124, 108, 227, 0.25);
 }
 
 .toggle-switch {
@@ -1015,7 +1087,7 @@ select {
 
 /* shared ProfileFieldsEditor */
 .profile-fields {
-  --pf-btn-w: 56px; /* avatar width below derives from this: 2 buttons + gap */
+  --pf-avatar-size: 116px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1042,8 +1114,8 @@ select {
   opacity: 0.7;
 }
 .pf-avatar {
-  width: calc(var(--pf-btn-w) * 2 + 4px);
-  height: calc(var(--pf-btn-w) * 2 + 4px);
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
   border-radius: 12px;
   object-fit: contain;
   background: transparent;
@@ -1061,8 +1133,8 @@ select {
 }
 .pf-avatar-wrap {
   position: relative;
-  width: calc(var(--pf-btn-w) * 2 + 4px);
-  height: calc(var(--pf-btn-w) * 2 + 4px);
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
 }
 .pf-avatar-spinner {
   position: absolute;
@@ -1097,8 +1169,13 @@ select {
   flex: none;
 }
 .pf-swatch--empty {
-  background: #26272d;
-  color: #6a6d78;
+  background: rgba(109, 94, 252, 0.12);
+  border: 1.5px solid #6d5efc;
+  color: #6d5efc;
+}
+.pf-swatch--empty:hover {
+  background: rgba(109, 94, 252, 0.22);
+  border-color: #7c6ce3;
 }
 .pf-color-input {
   position: absolute;
@@ -1110,19 +1187,22 @@ select {
 }
 .pf-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 .pf-btn {
-  min-width: var(--pf-btn-w);
-  padding: 2px 8px;
+  padding: 5px 10px;
   font-size: 12px;
+  border-radius: 6px;
 }
 .pf-btn--muted {
   background: transparent;
-  opacity: 0.7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.65);
 }
 .pf-btn--muted:hover {
-  background: #3a3b42;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #fff;
 }
 
 .pf-color-row {
@@ -1221,13 +1301,21 @@ select {
   top: 8px;
   right: 8px;
   z-index: 1;
-  background: #e81123;
-  color: #fff;
-  font-size: 12px;
-  padding: 3px 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.5);
 }
 .friend-remove:hover {
-  background: #f01c2c;
+  background: rgba(232, 17, 35, 0.15);
+  border-color: rgba(232, 17, 35, 0.5);
+  color: #ff5a68;
 }
 .friend-id {
   font-family: 'Consolas', 'Courier New', monospace;
