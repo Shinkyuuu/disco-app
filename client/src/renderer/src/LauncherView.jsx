@@ -130,7 +130,16 @@ export default function LauncherView() {
 
   function reloadOwnAppearance(userId) {
     if (!userId) return;
-    window.api.resolveSpeakerProfile({ speakerId: userId, slotIndex: -1 }).then(setOwnAppearance);
+    Promise.all([
+      window.api.resolveSpeakerProfile({ speakerId: userId, slotIndex: -1 }),
+      window.api.getBroadcastAvatar().catch(() => ({ silentURL: null, speakingURL: null })),
+    ]).then(([profile, broadcast]) => {
+      setOwnAppearance({
+        ...profile,
+        avatarSilent: broadcast.silentURL ?? null,
+        avatarSpeaking: broadcast.speakingURL ?? null,
+      });
+    });
   }
 
   useEffect(() => {

@@ -874,6 +874,14 @@ select {
   gap: 10px;
 }
 
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
 .settings-heading {
   margin: 0;
   font-size: 15px;
@@ -914,6 +922,57 @@ select {
   font-size: 14px;
   font-weight: 400;
   margin-bottom: 8px;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.toggle-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.toggle-switch-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: none;
+  border-radius: 10px;
+  background: #3a3b42;
+  transition: background-color 0.15s ease;
+}
+
+.toggle-switch input:checked + .toggle-switch-track {
+  background: #6d5efc;
+}
+
+.toggle-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s ease;
+}
+
+.toggle-switch input:checked + .toggle-switch-track .toggle-switch-knob {
+  transform: translateX(16px);
+}
+
+.toggle-switch-label {
+  color: inherit;
 }
 
 .about-scroll .settings-heading {
@@ -998,6 +1057,9 @@ select {
   background: #26272d;
   color: #6a6d78;
   font-size: 20px;
+}
+.pf-avatar--busy {
+  opacity: 0.5;
 }
 .pf-swatch {
   position: relative;

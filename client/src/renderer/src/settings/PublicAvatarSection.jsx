@@ -14,15 +14,27 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import AvatarField from './AvatarField';
+import ColorField from './ColorField';
+import { colorsOf } from './profileColors';
 
 // Uploads/clears the avatar broadcast to OTHER viewers (server-backed, via
-// AWS S3/CloudFront) - distinct from YourProfileSection, which only affects
-// how you locally see yourself and never leaves this machine.
-export default function PublicAvatarSection({ loggedInUserId }) {
+// AWS S3/CloudFront). Colors below are local-only (never broadcast) - same
+// storage/IPC as any other profile's colors, just edited from this section.
+export default function PublicAvatarSection({ loggedInUserId, profile, onChange }) {
   const [images, setImages] = useState({ silent: null, speaking: null });
   const [error, setError] = useState(null);
   const [pending, setPending] = useState(null); // 'silent' | 'speaking' | null
+
+  useEffect(() => {
+    if (!loggedInUserId) return;
+    window.api.getBroadcastAvatar()
+      .then(({ silentURL, speakingURL }) => {
+        setImages({ silent: silentURL ?? null, speaking: speakingURL ?? null });
+      })
+      .catch((err) => setError(`Failed to load current avatar: ${err.message}`));
+  }, [loggedInUserId]);
 
   if (!loggedInUserId) {
     return (
@@ -61,23 +73,54 @@ export default function PublicAvatarSection({ loggedInUserId }) {
     }
   }
 
+  const currentColors = profile ?? { usernameColor: null, chatColor: null };
+
+  async function updateColor(field, value) {
+    await window.api.setFriendProfileColors(loggedInUserId, { ...colorsOf(currentColors), [field]: value });
+    onChange();
+  }
+
   return (
     <>
       <h3 className="settings-heading settings-heading--profile">Public Avatar</h3>
       <section className="settings-section your-profile">
         <p className="settings-subtext">Shown to other viewers in shared voice channels (custom avatar mode only).</p>
-        {['silent', 'speaking'].map((kind) => (
-          <div key={kind} className="settings-field">
-            <span>{kind === 'silent' ? 'Silent image' : 'Speaking image'}</span>
-            {images[kind] && <img src={images[kind]} alt={`${kind} preview`} width={48} height={48} />}
-            <button type="button" disabled={pending === kind} onClick={() => handlePick(kind)}>
-              {pending === kind ? 'Working…' : 'Choose image'}
-            </button>
-            <button type="button" disabled={pending === kind} onClick={() => handleClear(kind)}>
-              Clear
-            </button>
+        <div className="profile-fields profile-fields--card">
+          <div className="pf-avatars">
+            <AvatarField
+              label="Silent"
+              src={images.silent}
+              busy={pending === 'silent'}
+              onPick={() => handlePick('silent')}
+              onClear={() => handleClear('silent')}
+            />
+            <AvatarField
+              label="Speaking"
+              src={images.speaking}
+              busy={pending === 'speaking'}
+              onPick={() => handlePick('speaking')}
+              onClear={() => handleClear('speaking')}
+            />
           </div>
-        ))}
+          <div className="pf-colors">
+            <ColorField
+              label="Name color"
+              value={currentColors.usernameColor}
+              onSet={(v) => updateColor('usernameColor', v)}
+              onClear={() => updateColor('usernameColor', null)}
+              exampleText="Username"
+              exampleClassName="message-line-username message-line-username--medium"
+            />
+            <ColorField
+              label="Chat color"
+              value={currentColors.chatColor}
+              onSet={(v) => updateColor('chatColor', v)}
+              onClear={() => updateColor('chatColor', null)}
+              exampleText="This is what your captions will look like."
+              exampleClassName="message-line-text message-line-text--medium"
+            />
+          </div>
+        </div>
         {error && <p className="settings-subtext">{error}</p>}
       </section>
     </>

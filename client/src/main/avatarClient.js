@@ -32,6 +32,18 @@ async function postJson(url, { token, body, timeoutMs }) {
   return res.json();
 }
 
+async function getJson(url, { token, timeoutMs }) {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null);
+    throw new AvatarUploadError(errorBody?.error || `Request to ${url} failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function requestAvatarUploadUrl({ serverAddress, token, state, ext, timeoutMs = 5000 }) {
   const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
   return postJson(`${scheme}://${serverAddress}/api/avatar/upload-url`, { token, body: { state, ext }, timeoutMs });
@@ -45,6 +57,11 @@ export async function confirmAvatarUpload({ serverAddress, token, state, version
 export async function clearBroadcastAvatar({ serverAddress, token, state, timeoutMs = 5000 }) {
   const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
   await postJson(`${scheme}://${serverAddress}/api/avatar/clear`, { token, body: { state }, timeoutMs });
+}
+
+export async function getBroadcastAvatarUrls({ serverAddress, token, timeoutMs = 5000 }) {
+  const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
+  return getJson(`${scheme}://${serverAddress}/api/avatar/me`, { token, timeoutMs });
 }
 
 export async function uploadFileToPresignedUrl({ uploadUrl, fileBuffer, contentType, timeoutMs = 15000 }) {

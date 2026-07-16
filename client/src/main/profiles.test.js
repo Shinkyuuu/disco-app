@@ -58,8 +58,15 @@ test('slotDirName rejects non-integer indices', () => {
   assert.throws(() => slotDirName('2'), RangeError);
 });
 
-function fakeStore({ friendProfiles = {}, defaultProfiles = [] } = {}) {
-  return { get: (key) => (key === 'friendProfiles' ? friendProfiles : defaultProfiles) };
+function fakeStore({ friendProfiles = {}, defaultProfiles = [], loggedInUserId = null } = {}) {
+  return {
+    get: (key) => {
+      if (key === 'friendProfiles') return friendProfiles;
+      if (key === 'defaultProfiles') return defaultProfiles;
+      if (key === 'loggedInUserId') return loggedInUserId;
+      return undefined;
+    },
+  };
 }
 
 // The friend-match and default-slot-match branches of resolveSpeakerProfile
@@ -74,4 +81,17 @@ test('resolveSpeakerProfile marks the empty fallback (no friend, no valid slot) 
   const store = fakeStore();
   const profile = resolveSpeakerProfile(store, { speakerId: 'user-3', slotIndex: -1 });
   assert.equal(profile.isFriendOverride, false);
+});
+
+test("resolveSpeakerProfile never returns local avatar images for the logged-in user's own id, even with a friendProfiles entry", () => {
+  const store = fakeStore({
+    friendProfiles: { 'self-1': { usernameColor: '#123456', chatColor: '#abcdef' } },
+    loggedInUserId: 'self-1',
+  });
+  const profile = resolveSpeakerProfile(store, { speakerId: 'self-1', slotIndex: -1 });
+  assert.equal(profile.avatarSilent, null);
+  assert.equal(profile.avatarSpeaking, null);
+  assert.equal(profile.isFriendOverride, false);
+  assert.equal(profile.usernameColor, '#123456');
+  assert.equal(profile.chatColor, '#abcdef');
 });

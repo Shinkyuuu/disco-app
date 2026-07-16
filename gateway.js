@@ -35,6 +35,7 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/api/avatar/upload-url') return handleAvatarUploadUrl(req, res);
   if (url.pathname === '/api/avatar/confirm') return handleAvatarConfirm(req, res);
   if (url.pathname === '/api/avatar/clear') return handleAvatarClear(req, res);
+  if (url.pathname === '/api/avatar/me') return handleAvatarMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
   res.end('Not found - use the Disco Electron client to view captions.');
 });
@@ -230,10 +231,25 @@ export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarCha
   };
 }
 
+export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
+  return async function handleAvatarMe(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    const urls = await resolveAvatarUrls(userId);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ silentURL: urls?.silentURL ?? null, speakingURL: urls?.speakingURL ?? null }));
+  };
+}
+
 const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: getUserProfile });
 const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
 const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarMe = createAvatarMeHandler({ verifyToken: verifySessionToken, resolveAvatarUrls: avatarRegistry.resolveAvatarUrls });
 
 export function createBroadcaster({ getLiveSession, clients }) {
   return function broadcastToSession(guildId, payload) {

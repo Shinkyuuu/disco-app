@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler } from './gateway.js';
 import { AvatarValidationError } from './avatarRegistry.js';
 
 function startTestServer(gateOptions) {
@@ -313,6 +313,46 @@ test('POST /api/avatar/clear returns 401 without a valid token, and does not not
   });
   assert.equal(res.status, 401);
   assert.deepEqual(changed, []);
+  server.close();
+});
+
+test('GET /api/avatar/me returns 200 with silentURL/speakingURL for a valid token', async () => {
+  const handler = createAvatarMeHandler({
+    verifyToken: (token) => (token === 'good-token' ? 'user-1' : null),
+    resolveAvatarUrls: async (userId) =>
+      userId === 'user-1' ? { silentURL: 'https://cdn/silent.png', speakingURL: 'https://cdn/speaking.png' } : null,
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer good-token' } });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body, { silentURL: 'https://cdn/silent.png', speakingURL: 'https://cdn/speaking.png' });
+  server.close();
+});
+
+test('GET /api/avatar/me returns 200 with nulls when no avatar has been set', async () => {
+  const handler = createAvatarMeHandler({ verifyToken: () => 'user-1', resolveAvatarUrls: async () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer tok' } });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body, { silentURL: null, speakingURL: null });
+  server.close();
+});
+
+test('GET /api/avatar/me returns 401 with no Authorization header', async () => {
+  const handler = createAvatarMeHandler({ verifyToken: () => 'user-1', resolveAvatarUrls: async () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`);
+  assert.equal(res.status, 401);
+  server.close();
+});
+
+test('GET /api/avatar/me returns 401 for an invalid token', async () => {
+  const handler = createAvatarMeHandler({ verifyToken: () => null, resolveAvatarUrls: async () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer bad-token' } });
+  assert.equal(res.status, 401);
   server.close();
 });
 

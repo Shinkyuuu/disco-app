@@ -58,6 +58,7 @@ import {
   confirmAvatarUpload,
   clearBroadcastAvatar as clearBroadcastAvatarRemote,
   uploadFileToPresignedUrl,
+  getBroadcastAvatarUrls,
 } from './avatarClient.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -788,6 +789,12 @@ function registerIpcHandlers() {
     const token = store.get('sessionToken');
     if (!token) throw new Error('Not logged in');
     await clearBroadcastAvatarRemote({ serverAddress: SERVER_ADDRESS, token, state: kind });
+  });
+
+  ipcMain.handle('get-broadcast-avatar', async () => {
+    const token = store.get('sessionToken');
+    if (!token) return { silentURL: null, speakingURL: null };
+    return getBroadcastAvatarUrls({ serverAddress: SERVER_ADDRESS, token });
   });
 
   ipcMain.handle('resize-window', (event, { width, height }) => {

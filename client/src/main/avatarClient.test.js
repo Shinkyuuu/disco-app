@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl } from './avatarClient.js';
+import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl, getBroadcastAvatarUrls } from './avatarClient.js';
 
 function startTestHttpServer(handler) {
   return new Promise((resolve) => {
@@ -106,6 +106,31 @@ test('clearBroadcastAvatar posts state and resolves on success', async () => {
   });
   await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking' });
   assert.deepEqual(receivedBody, { state: 'speaking' });
+  server.close();
+});
+
+test('getBroadcastAvatarUrls GETs with bearer auth and returns the parsed response', async () => {
+  let receivedAuth = null;
+  const { server, port } = await startTestHttpServer((req, res) => {
+    receivedAuth = req.headers.authorization;
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ silentURL: 'https://cdn/silent.png', speakingURL: null }));
+  });
+  const result = await getBroadcastAvatarUrls({ serverAddress: `localhost:${port}`, token: 'tok' });
+  assert.deepEqual(result, { silentURL: 'https://cdn/silent.png', speakingURL: null });
+  assert.equal(receivedAuth, 'Bearer tok');
+  server.close();
+});
+
+test('getBroadcastAvatarUrls throws AvatarUploadError on a non-ok response', async () => {
+  const { server, port } = await startTestHttpServer((req, res) => {
+    res.writeHead(401);
+    res.end();
+  });
+  await assert.rejects(
+    () => getBroadcastAvatarUrls({ serverAddress: `localhost:${port}`, token: 'bad' }),
+    AvatarUploadError,
+  );
   server.close();
 });
 

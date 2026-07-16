@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
   removeFriendProfile: (userId) => ipcRenderer.invoke('remove-friend-profile', userId),
   uploadBroadcastAvatar: (kind) => ipcRenderer.invoke('upload-broadcast-avatar', kind),
   clearBroadcastAvatar: (kind) => ipcRenderer.invoke('clear-broadcast-avatar', kind),
+  getBroadcastAvatar: () => ipcRenderer.invoke('get-broadcast-avatar'),
   resizeWindow: (width, height) => ipcRenderer.invoke('resize-window', { width, height }),
   isAlwaysOnTop: () => ipcRenderer.invoke('window-is-always-on-top'),
   setAlwaysOnTop: (value) => ipcRenderer.invoke('window-set-always-on-top', value),

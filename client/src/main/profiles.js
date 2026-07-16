@@ -123,14 +123,21 @@ export function reconcileFriendProfiles(store) {
   if (changed) store.set('friendProfiles', friendProfiles);
 }
 
+// The logged-in user's own entry in friendProfiles (created by the removed
+// "Your Profile" UI, or by setting colors via Public Avatar) must never
+// surface as an avatar-image override: resolveAppearance.js ranks a friend
+// override above the broadcast/Public Avatar tier, which would let a stale
+// local image permanently outrank a newly-set Public Avatar for yourself.
+// Colors are unaffected - only the avatar images are suppressed for self.
 export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
+  const isSelf = speakerId === store.get('loggedInUserId');
   const friend = store.get('friendProfiles')[speakerId];
   if (friend) {
     return {
-      ...readImagesFor('friend', speakerId),
+      ...(isSelf ? { avatarSilent: null, avatarSpeaking: null } : readImagesFor('friend', speakerId)),
       usernameColor: friend.usernameColor ?? null,
       chatColor: friend.chatColor ?? null,
-      isFriendOverride: true,
+      isFriendOverride: !isSelf,
     };
   }
   if (slotIndex >= 0 && slotIndex < 10) {

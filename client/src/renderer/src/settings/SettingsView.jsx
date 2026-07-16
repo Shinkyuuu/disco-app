@@ -15,11 +15,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import YourProfileSection from './YourProfileSection';
 import DefaultSlotsSection from './DefaultSlotsSection';
 import FriendOverridesSection from './FriendOverridesSection';
 import PublicAvatarSection from './PublicAvatarSection';
 import ChatAppearanceSection from './ChatAppearanceSection';
+import ToggleSwitch from './ToggleSwitch';
 import { resolveFontOption, DEFAULT_FONT_ID } from '../chatAppearanceOptions';
 
 export default function SettingsView({ settings, onSettingsChange, onBack }) {
@@ -62,22 +62,24 @@ export default function SettingsView({ settings, onSettingsChange, onBack }) {
               <option value="custom">Custom image</option>
             </select>
           </label>
-          <label className="settings-field">
-            Receive beta updates
-            <input
-              type="checkbox"
-              checked={settings.betaUpdates ?? false}
-              onChange={(e) => onSettingsChange({ betaUpdates: e.target.checked }, true)}
-            />
-          </label>
         </section>
 
         <ChatAppearanceSection settings={settings} onSettingsChange={onSettingsChange} />
 
-        <YourProfileSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
-        <PublicAvatarSection loggedInUserId={loggedInUserId} />
+        <PublicAvatarSection loggedInUserId={loggedInUserId} profile={yourProfile} onChange={reload} />
         <FriendOverridesSection friends={otherFriends} onChange={reload} />
         <DefaultSlotsSection profiles={defaultProfiles} onChange={reload} />
+
+        <h3 className="settings-heading">Developer Options</h3>
+        <section className="settings-section">
+          <div className="settings-toggle-row">
+            <span className="settings-toggle-row-label">Receive beta updates</span>
+            <ToggleSwitch
+              checked={settings.betaUpdates ?? false}
+              onChange={(checked) => onSettingsChange({ betaUpdates: checked }, true)}
+            />
+          </div>
+        </section>
       </div>
     </div>
   );
