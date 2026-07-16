@@ -1055,6 +1055,31 @@ select {
 .pf-avatar--busy {
   opacity: 0.5;
 }
+.pf-avatar-wrap {
+  position: relative;
+  width: calc(var(--pf-btn-w) * 2 + 4px);
+  height: calc(var(--pf-btn-w) * 2 + 4px);
+}
+.pf-avatar-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #6d5efc;
+  border-radius: 50%;
+  animation: pf-avatar-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes pf-avatar-spinner-rotate {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
 .pf-swatch {
   position: relative;
   width: 22px;
