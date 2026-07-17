@@ -740,6 +740,13 @@ input {
   z-index: 3; /* above .chat-status-banner (z-index: 2), which otherwise escapes
                  .chat-header's non-isolated stacking context and covers the
                  .window-menu button that lives inside this panel */
+  /* 1px margin on the trailing edges: with border-radius set, Chromium clips
+     the rounded border's anti-aliased edge wherever the box is flush against
+     this transparent frameless window's own boundary (confirmed via a direct
+     render repro - the top/left edges, also flush at 0, are unaffected, only
+     the far/bottom-right edges are). This margin keeps the border off the
+     window edge so it always renders fully. */
+  margin: 0 1px 1px 0;
   background: #17121f;
   border: var(--chat-border-width, 5px) solid #ffffff;
   border-radius: var(--chat-border-radius, 0);
