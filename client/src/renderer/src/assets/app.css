@@ -197,6 +197,16 @@ input {
   padding: 6px 12px;
 }
 
+/* Persistent on/off cue for the 5 binary-toggle items below (Pin, Lock,
+   Auto width, Snap to edge, Show/Hide chat box) - tint reflects the raw
+   settings flag being true. Lower specificity than [data-highlighted]
+   below, so hovering an "on" item still shows the normal highlight
+   background; the accent text color persists on top of it. */
+.window-menu-item--on {
+  background: rgba(124, 108, 227, 0.18);
+  color: #b3a6ff;
+}
+
 .window-menu-item[data-highlighted],
 .window-menu-item--active {
   background: #3a3358;
