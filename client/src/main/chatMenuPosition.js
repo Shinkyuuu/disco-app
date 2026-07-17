@@ -41,7 +41,7 @@ const MENU_SEPARATOR_HEIGHT = 9;
 // state (e.g. error screens pass none of these, leaving only Exit).
 export function chatMenuHeightFor(sections) {
   const hasChatboxGroup = sections.avatarSize || sections.chatSize || sections.opacity || sections.collapse;
-  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth;
+  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth || sections.snapToEdge;
 
   // General (Exit) is always present, so its label always renders.
   let height = MENU_BASE_PADDING + MENU_ROW_HEIGHT + MENU_LABEL_HEIGHT;
@@ -52,6 +52,7 @@ export function chatMenuHeightFor(sections) {
   if (sections.collapse) height += MENU_ROW_HEIGHT;
   if (sections.lock) height += MENU_ROW_HEIGHT;
   if (sections.autoWidth) height += MENU_ROW_HEIGHT;
+  if (sections.snapToEdge) height += MENU_ROW_HEIGHT;
   if (hasChatboxGroup) height += MENU_LABEL_HEIGHT;
   if (hasOverlayGroup) height += MENU_LABEL_HEIGHT;
   if (hasChatboxGroup && hasOverlayGroup) height += MENU_SEPARATOR_HEIGHT;

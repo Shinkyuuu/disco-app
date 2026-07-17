@@ -84,11 +84,12 @@ export default function ChatMenuView({ params }) {
     collapse: params.has('collapse'),
     lock: params.has('lock'),
     autoWidth: params.has('autoWidth'),
+    snapToEdge: params.has('snapToEdge'),
   };
   const openDirection = params.get('openDirection') === 'up' ? 'up' : 'down';
 
   const hasChatboxGroup = sections.avatarSize || sections.chatSize || sections.opacity || sections.collapse;
-  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth;
+  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth || sections.snapToEdge;
 
   const [settings, setSettings] = useState(null);
   const [pinned, setPinned] = useState(false);
@@ -206,6 +207,14 @@ export default function ChatMenuView({ params }) {
                     onSelect={() => changeSetting({ chatAutoWidth: !settings.chatAutoWidth })}
                   >
                     {settings.chatAutoWidth ? 'Disable auto width' : 'Enable auto width'}
+                  </DropdownMenu.Item>
+                )}
+                {sections.snapToEdge && (
+                  <DropdownMenu.Item
+                    className="window-menu-item"
+                    onSelect={() => changeSetting({ chatSnapToEdge: !settings.chatSnapToEdge })}
+                  >
+                    {settings.chatSnapToEdge ? 'Disable snap to edge' : 'Enable snap to edge'}
                   </DropdownMenu.Item>
                 )}
               </>

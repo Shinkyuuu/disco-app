@@ -49,3 +49,11 @@ test('serverAddress is not allowlisted (it is set via the SERVER_ADDRESS env var
 test('betaUpdates is allowlisted', () => {
   assert.deepEqual(sanitizeSettingsPatch({ betaUpdates: true }), { betaUpdates: true });
 });
+
+test('chatSnapToEdge is allowlisted', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ chatSnapToEdge: true }), { chatSnapToEdge: true });
+});
+
+test('chatSnappedEdge is not allowlisted - it is internal bookkeeping set only by main, like chatWindowPosition', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ chatSnappedEdge: 'top' }), {});
+});
