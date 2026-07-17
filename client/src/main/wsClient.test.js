@@ -17,6 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import net from 'node:net';
 import { WebSocketServer } from 'ws';
 import { createWsClient } from './wsClient.js';
 
@@ -129,5 +130,90 @@ test('emits session-ended when the server sends a session-ended message', async 
   await new Promise((resolve) => client.on('session-ended', resolve));
 
   client.close();
+  wss.close();
+});
+
+test('force-reconnects when the server goes completely silent for longer than the heartbeat timeout', async () => {
+  let connectionCount = 0;
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type !== 'auth') return;
+    connectionCount += 1;
+    // First connection says nothing at all after auth - no roster, no ping - so
+    // the client's watchdog is the only thing that can ever move this forward.
+    if (connectionCount === 2) ws.send(JSON.stringify({ type: 'roster', members: [] }));
+  });
+  const client = createWsClient({
+    serverAddress: `localhost:${port}`,
+    token: 'tok',
+    reconnectBaseDelayMs: 10,
+    heartbeatTimeoutMs: 30,
+  });
+  await new Promise((resolve) => client.on('roster', resolve));
+  assert.ok(connectionCount >= 2);
+  client.close();
+  wss.close();
+});
+
+test('does not force-reconnect while the server keeps sending pings within the heartbeat timeout', async () => {
+  let connectionCount = 0;
+  let pingTimer;
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type !== 'auth') return;
+    connectionCount += 1;
+    pingTimer = setInterval(() => ws.ping(), 15);
+  });
+  const client = createWsClient({
+    serverAddress: `localhost:${port}`,
+    token: 'tok',
+    reconnectBaseDelayMs: 10,
+    heartbeatTimeoutMs: 50,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 150)); // several ping intervals, past one heartbeat window
+  assert.equal(connectionCount, 1);
+  clearInterval(pingTimer);
+  client.close();
+  wss.close();
+});
+
+test('force-reconnects if the handshake itself hangs (TCP connects, but no open/error/close ever fires)', async () => {
+  // A tunnel/proxy that silently swallows the HTTP Upgrade exchange looks exactly
+  // like this: the TCP connection succeeds, but nothing ever comes back - no 101
+  // response, no error, no close. Without a connect-phase watchdog this attempt
+  // would hang forever.
+  const server = net.createServer((socket) => {
+    server.__sockets = server.__sockets || [];
+    server.__sockets.push(socket); // never write/end - the handshake just hangs
+  });
+  await new Promise((resolve) => server.listen(0, resolve));
+  const port = server.address().port;
+
+  const client = createWsClient({
+    serverAddress: `localhost:${port}`,
+    token: 'tok',
+    reconnectBaseDelayMs: 10,
+    heartbeatTimeoutMs: 30,
+  });
+  await new Promise((resolve) => client.on('close', resolve));
+
+  client.close();
+  for (const socket of server.__sockets || []) socket.destroy();
+  server.close();
+});
+
+test('close() stops the heartbeat watchdog so it does not force a reconnect after an intentional close', async () => {
+  let connectionCount = 0;
+  const { wss, port } = await startFakeGateway((ws, msg) => {
+    if (msg.type === 'auth') connectionCount += 1; // never sends anything back
+  });
+  const client = createWsClient({
+    serverAddress: `localhost:${port}`,
+    token: 'tok',
+    reconnectBaseDelayMs: 20,
+    heartbeatTimeoutMs: 30,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5)); // let the connection open
+  client.close();
+  await new Promise((resolve) => setTimeout(resolve, 100)); // well past heartbeatTimeoutMs and reconnectBaseDelayMs
+  assert.equal(connectionCount, 1);
   wss.close();
 });
