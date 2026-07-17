@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler, createAvatarColorsHandler } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler, createAvatarColorsHandler, sweepHeartbeats, createHeartbeat } from './gateway.js';
 import { AvatarValidationError } from './avatarRegistry.js';
 
 function startTestServer(gateOptions) {
@@ -520,4 +520,90 @@ test('notifySessionEnded skips a client whose socket is not open', () => {
   notifySessionEnded('guild-1');
 
   assert.equal(sent.length, 0);
+});
+
+test('sweepHeartbeats pings a client that answered the previous round, and arms it for the next', () => {
+  const calls = [];
+  const ws = { isAlive: true, ping: () => calls.push('ping'), terminate: () => calls.push('terminate') };
+  const clients = new Map([[ws, { userId: 'user-a', guildId: 'guild-1' }]]);
+
+  sweepHeartbeats(clients);
+
+  assert.deepEqual(calls, ['ping']);
+  assert.equal(ws.isAlive, false);
+});
+
+test('sweepHeartbeats terminates a client that missed the previous round\'s pong instead of pinging it again', () => {
+  const calls = [];
+  const ws = { isAlive: false, ping: () => calls.push('ping'), terminate: () => calls.push('terminate') };
+  const clients = new Map([[ws, { userId: 'user-a', guildId: 'guild-1' }]]);
+
+  sweepHeartbeats(clients);
+
+  assert.deepEqual(calls, ['terminate']);
+});
+
+test('sweepHeartbeats treats a freshly-connected client (isAlive undefined) as alive, not stale', () => {
+  const calls = [];
+  const ws = { ping: () => calls.push('ping'), terminate: () => calls.push('terminate') };
+  const clients = new Map([[ws, { userId: 'user-a', guildId: 'guild-1' }]]);
+
+  sweepHeartbeats(clients);
+
+  assert.deepEqual(calls, ['ping']);
+});
+
+test('createHeartbeat keeps a real, responsive connection alive across several sweeps', async () => {
+  const gatewayClients = new Map();
+  const { wss, port } = await startTestServer({
+    verifyToken: () => 'user-1',
+    getLiveSession: () => ({ guildId: 'guild-1', channelId: 'chan-1' }),
+    getRosterSnapshot: () => [],
+    clients: gatewayClients,
+    timeoutMs: 1000,
+  });
+  const ws = new WebSocket(`ws://localhost:${port}`);
+  await new Promise((resolve) => ws.once('open', resolve));
+  ws.send(JSON.stringify({ type: 'auth', token: 'irrelevant' }));
+  await new Promise((resolve) => ws.once('message', resolve));
+
+  const interval = createHeartbeat({ clients: gatewayClients, intervalMs: 15 });
+  await new Promise((resolve) => setTimeout(resolve, 100)); // several sweeps' worth
+
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  clearInterval(interval);
+  ws.close();
+  wss.close();
+});
+
+test('createHeartbeat terminates a real connection that stops responding to pings, and the existing close handler cleans it out of clients', async () => {
+  const gatewayClients = new Map();
+  const { wss, port } = await startTestServer({
+    verifyToken: () => 'user-1',
+    getLiveSession: () => ({ guildId: 'guild-1', channelId: 'chan-1' }),
+    getRosterSnapshot: () => [],
+    clients: gatewayClients,
+    timeoutMs: 1000,
+  });
+  const ws = new WebSocket(`ws://localhost:${port}`);
+  await new Promise((resolve) => ws.once('open', resolve));
+  ws.send(JSON.stringify({ type: 'auth', token: 'irrelevant' }));
+  await new Promise((resolve) => ws.once('message', resolve));
+  assert.equal(gatewayClients.size, 1);
+
+  // Stop processing incoming frames (including pings) to simulate a stalled peer,
+  // without tearing down the TCP connection ourselves - the server must be the one
+  // to notice and terminate it. (A paused client stream may never surface its own
+  // 'close' event since it stops consuming, so this asserts on the server's state -
+  // the thing the heartbeat is actually responsible for - rather than the client.)
+  ws.pause();
+
+  const interval = createHeartbeat({ clients: gatewayClients, intervalMs: 15 });
+  while (gatewayClients.size > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  clearInterval(interval);
+  ws.terminate(); // paused and never resumed - forcibly release its handle rather than leaving it open
+  wss.close();
 });

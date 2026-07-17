@@ -84,11 +84,12 @@ export default function ChatMenuView({ params }) {
     collapse: params.has('collapse'),
     lock: params.has('lock'),
     autoWidth: params.has('autoWidth'),
+    snapToEdge: params.has('snapToEdge'),
   };
   const openDirection = params.get('openDirection') === 'up' ? 'up' : 'down';
 
   const hasChatboxGroup = sections.avatarSize || sections.chatSize || sections.opacity || sections.collapse;
-  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth;
+  const hasOverlayGroup = sections.pin || sections.lock || sections.autoWidth || sections.snapToEdge;
 
   const [settings, setSettings] = useState(null);
   const [pinned, setPinned] = useState(false);
@@ -175,7 +176,9 @@ export default function ChatMenuView({ params }) {
                 )}
                 {sections.collapse && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatCollapsed ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatCollapsed: !settings.chatCollapsed })}
                   >
                     {settings.chatCollapsed ? 'Show chat box' : 'Hide chat box'}
@@ -188,13 +191,18 @@ export default function ChatMenuView({ params }) {
               <>
                 <DropdownMenu.Label className="window-menu-label">Overlay</DropdownMenu.Label>
                 {sections.pin && (
-                  <DropdownMenu.Item className="window-menu-item" onSelect={togglePin}>
+                  <DropdownMenu.Item
+                    className={pinned ? 'window-menu-item window-menu-item--on' : 'window-menu-item'}
+                    onSelect={togglePin}
+                  >
                     {pinned ? 'Unpin window' : 'Pin window'}
                   </DropdownMenu.Item>
                 )}
                 {sections.lock && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatLocked ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatLocked: !settings.chatLocked })}
                   >
                     {settings.chatLocked ? 'Unlock window' : 'Lock window'}
@@ -202,10 +210,22 @@ export default function ChatMenuView({ params }) {
                 )}
                 {sections.autoWidth && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatAutoWidth ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatAutoWidth: !settings.chatAutoWidth })}
                   >
                     {settings.chatAutoWidth ? 'Disable auto width' : 'Enable auto width'}
+                  </DropdownMenu.Item>
+                )}
+                {sections.snapToEdge && (
+                  <DropdownMenu.Item
+                    className={
+                      settings.chatSnapToEdge ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
+                    onSelect={() => changeSetting({ chatSnapToEdge: !settings.chatSnapToEdge })}
+                  >
+                    {settings.chatSnapToEdge ? 'Disable snap to edge' : 'Enable snap to edge'}
                   </DropdownMenu.Item>
                 )}
               </>

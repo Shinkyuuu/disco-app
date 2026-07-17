@@ -21,22 +21,55 @@ import { schemeFor } from './serverScheme.js';
 
 const AUTH_CLOSE_CODES = new Set([4001, 4002, 4003, 4008]);
 
-export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
+// The server pings roughly every HEARTBEAT_INTERVAL_MS (see gateway.js) even when
+// the voice channel is silent, specifically so a connection proxied through
+// something like a Cloudflare tunnel never looks idle to the network in between.
+// If this much time passes with no ping (and none arrived at all, for a hung
+// handshake), the connection is presumed dead - the tunnel/edge may have dropped
+// it without ever delivering a close frame back to this side - and is forced
+// closed so the existing reconnect-with-backoff flow below takes over, rather
+// than sitting on a socket that looks open but isn't. Only pings rearm this once
+// a connection is established: a roster/speaking/transcript message never arrives
+// without a ping having arrived first too (the server sends both on the same
+// schedule regardless of each other), so re-arming on message traffic as well
+// would be redundant - and 'message' is this app's highest-frequency event.
+const DEFAULT_HEARTBEAT_TIMEOUT_MS = 45000;
+
+export function createWsClient({ serverAddress, token, reconnectBaseDelayMs, heartbeatTimeoutMs = DEFAULT_HEARTBEAT_TIMEOUT_MS }) {
   const emitter = new EventEmitter();
   let attempt = 0;
   let closedByCaller = false;
   let socket = null;
   let reconnectTimer = null;
+  let watchdogTimer = null;
+
+  function armWatchdog() {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = setTimeout(() => socket.terminate(), heartbeatTimeoutMs);
+  }
+
+  function clearWatchdog() {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = null;
+  }
 
   function connect() {
     const scheme = schemeFor(serverAddress, { secure: 'wss', insecure: 'ws' });
     socket = new WebSocket(`${scheme}://${serverAddress}/`);
+    // Covers the handshake itself, not just the established connection - a proxy
+    // that silently swallows the HTTP Upgrade exchange (TCP connects, but nothing
+    // ever comes back) fires neither 'open' nor 'error' nor 'close' on its own,
+    // which would otherwise hang this connection attempt forever.
+    armWatchdog();
 
     socket.on('open', () => {
       socket.send(JSON.stringify({ type: 'auth', token }));
       attempt = 0;
+      armWatchdog();
       emitter.emit('open');
     });
+
+    socket.on('ping', () => armWatchdog());
 
     // A failed handshake (e.g. a 502 from a proxy while the server is down or
     // restarting) is an 'error' event with no listener by default - Node
@@ -61,6 +94,7 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
     });
 
     socket.on('close', (code, reasonBuf) => {
+      clearWatchdog();
       const reason = reasonBuf.toString();
       emitter.emit('close', code, reason);
       if (closedByCaller) return;
@@ -88,6 +122,7 @@ export function createWsClient({ serverAddress, token, reconnectBaseDelayMs }) {
     // caller closes keeps running on its own after close() returns - opening a
     // fresh socket with a token/state the caller has since considered gone.
     clearTimeout(reconnectTimer);
+    clearWatchdog();
     socket.close();
   };
   return emitter;

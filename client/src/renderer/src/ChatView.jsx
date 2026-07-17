@@ -188,7 +188,7 @@ export default function ChatView() {
       avatarMode={avatarMode}
       collapsed={chatCollapsed}
       locked={locked}
-      menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true, autoWidth: true }}
+      menuSections={{ avatarSize: true, chatSize: true, opacity: true, pin: true, collapse: true, lock: true, autoWidth: true, snapToEdge: true }}
       panelStyle={{
         backgroundColor: `rgba(13, 14, 17, ${chatOpacity})`,
         '--chat-font-family': fontOption.cssFontFamily,
