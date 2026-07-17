@@ -32,6 +32,7 @@ import {
   MIN_CHAT_PANEL_HEIGHT,
 } from './chatWindowSize.js';
 import { chatMenuHeightFor, chatMenuPositionFor, MENU_POPUP_WIDTH } from './chatMenuPosition.js';
+import { nearestEdge, snappedPosition } from './chatWindowSnap.js';
 import { createWsClient } from './wsClient.js';
 import { sanitizeSettingsPatch } from './settingsKeys.js';
 import { schemeFor } from './serverScheme.js';
@@ -363,6 +364,7 @@ function applyChatWindowSize(win) {
     win.setMinimumSize(width, height);
     win.setMaximumSize(width, height);
     win.setSize(width, height);
+    reflowSnappedEdge(win);
     return;
   }
 
@@ -379,6 +381,7 @@ function applyChatWindowSize(win) {
     win.setMaximumSize(0, 0);
   }
   win.setSize(width, height);
+  reflowSnappedEdge(win);
 }
 
 // The persisted chatWindowPosition, if it's still on a currently-connected
@@ -398,6 +401,46 @@ function chatWindowPositionOnScreen() {
       position.y < bounds.y + bounds.height
     );
   return onScreen ? position : null;
+}
+
+// Central point through which the chat window is repositioned for "snap to
+// edge" - see chatWindowSnap.js for the pure edge/position math. Two
+// distinct entry points on purpose: snapWindowToNearestEdge actively
+// re-chooses which edge is closest (a drag settling, the setting being
+// turned on, or the window being created), while reflowSnappedEdge only
+// keeps the window flush against whichever edge is already recorded (any
+// programmatic size change) - it never re-chooses, so a collapse/expand or
+// auto-width change can't silently flip which edge the window is snapped to.
+function displayForWindow(win) {
+  const { x, y, width, height } = win.getBounds();
+  return screen.getDisplayNearestPoint({ x: x + width / 2, y: y + height / 2 });
+}
+
+// `target` is 'bounds' or 'workArea' - which of the display's two
+// rectangles to stay flush against (see chatWindowSnap.js's nearestEdge for
+// why there are two).
+function moveToEdge(win, edge, target) {
+  const bounds = win.getBounds();
+  const display = displayForWindow(win);
+  const rect = target === 'workArea' ? display.workArea : display.bounds;
+  const { x, y } = snappedPosition(bounds, rect, edge);
+  if (x !== bounds.x || y !== bounds.y) win.setPosition(x, y);
+}
+
+function snapWindowToNearestEdge(win) {
+  if (!store.get('chatSnapToEdge')) return;
+  const bounds = win.getBounds();
+  const display = displayForWindow(win);
+  const { edge, target } = nearestEdge(bounds, display.bounds, display.workArea);
+  store.set('chatSnappedEdge', { edge, target });
+  moveToEdge(win, edge, target);
+}
+
+function reflowSnappedEdge(win) {
+  if (!store.get('chatSnapToEdge')) return;
+  const snapped = store.get('chatSnappedEdge');
+  if (!snapped) return;
+  moveToEdge(win, snapped.edge, snapped.target);
 }
 
 function createChatWindow() {
@@ -462,6 +505,7 @@ function createChatWindow() {
     if (chatWindow.isAlwaysOnTop()) chatWindow.setAlwaysOnTop(true, 'screen-saver');
   });
   chatWindow.on('moved', () => {
+    snapWindowToNearestEdge(chatWindow);
     const [x, y] = chatWindow.getPosition();
     store.set('chatWindowPosition', { x, y });
   });
@@ -479,6 +523,7 @@ function createChatWindow() {
     const currentHeaderH = headerHeightFor(store.get('avatarSize'), store.get('avatarMode'));
     store.set('chatWindowPanelHeight', Math.max(h - currentHeaderH, MIN_CHAT_PANEL_HEIGHT));
   });
+  if (store.get('chatSnapToEdge')) snapWindowToNearestEdge(chatWindow);
   chatWindow.loadURL(rendererUrl('chat'));
   chatWindow.on('closed', () => {
     chatWindow = null;
@@ -662,6 +707,7 @@ function registerIpcHandlers() {
     chatCollapsed: store.get('chatCollapsed'),
     chatLocked: store.get('chatLocked'),
     chatAutoWidth: store.get('chatAutoWidth'),
+    chatSnapToEdge: store.get('chatSnapToEdge'),
     chatFontFamily: store.get('chatFontFamily'),
     chatBorderStyle: store.get('chatBorderStyle'),
     betaUpdates: store.get('betaUpdates'),
@@ -691,6 +737,11 @@ function registerIpcHandlers() {
     if ('chatLocked' in sanitized && chatWindow) {
       chatWindow.setMovable(!sanitized.chatLocked);
       chatWindow.setIgnoreMouseEvents(sanitized.chatLocked, { forward: true });
+    }
+    // Turning "snap to edge" on repositions the window right away, per the
+    // design - it doesn't wait for the next drag to take effect.
+    if ('chatSnapToEdge' in sanitized && sanitized.chatSnapToEdge && chatWindow) {
+      snapWindowToNearestEdge(chatWindow);
     }
     // getSettings is only read once, on mount, by every renderer - push every
     // change through so an already-open chat window (and its ⋯ menu popup,

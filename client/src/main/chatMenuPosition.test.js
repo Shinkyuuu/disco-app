@@ -36,6 +36,12 @@ test('chatMenuHeightFor grows when the autoWidth section is enabled', () => {
   assert.ok(withAutoWidth > exitOnly);
 });
 
+test('chatMenuHeightFor grows when the snapToEdge section is enabled', () => {
+  const exitOnly = chatMenuHeightFor({});
+  const withSnapToEdge = chatMenuHeightFor({ snapToEdge: true });
+  assert.ok(withSnapToEdge > exitOnly);
+});
+
 test('chatMenuPositionFor opens downward and left-aligns to the anchor when there is room', () => {
   const anchor = { x: 700, y: 500, width: 24, height: 24 };
   const size = { width: MENU_POPUP_WIDTH, height: 300 };

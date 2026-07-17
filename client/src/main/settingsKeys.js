@@ -29,6 +29,7 @@ export const SETTABLE_KEYS = new Set([
   'chatCollapsed',
   'chatLocked',
   'chatAutoWidth',
+  'chatSnapToEdge',
   'chatFontFamily',
   'chatBorderStyle',
   'betaUpdates',
