@@ -59,6 +59,11 @@ export function createAuthGate({ verifyToken, getLiveSession, getRosterSnapshot,
       console.error('Gateway client socket error:', err);
     });
 
+    // Answers sweepHeartbeats below - true until a ping goes unanswered for a
+    // full interval, at which point the connection is presumed dead and terminated.
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+
     const timer = setTimeout(() => ws.close(4008, 'auth timeout'), timeoutMs);
     // Without this, a client that opens a socket and disconnects without ever sending
     // anything leaves the timer pending for up to timeoutMs, calling ws.close() on an
@@ -326,6 +331,31 @@ function getRosterSnapshot(guildId) {
   return getSession(guildId)?.roster ?? [];
 }
 
+// Without this, a connection proxied through the Cloudflare tunnel that goes
+// idle (no captions/roster changes for a few minutes, which is a normal lull
+// in conversation) carries zero traffic in either direction - the tunnel's
+// edge silently drops it, and the client only notices once it tries to send
+// or the OS eventually reports the dead socket, surfacing as a spurious
+// "Reconnecting..." banner. A periodic ping keeps traffic flowing so the
+// tunnel never sees the connection as idle, and also lets the server detect
+// and clean up a truly dead client instead of leaving it in `clients` forever.
+export const HEARTBEAT_INTERVAL_MS = 20000;
+
+export function sweepHeartbeats(clients) {
+  for (const ws of clients.keys()) {
+    if (ws.isAlive === false) {
+      ws.terminate();
+      continue;
+    }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}
+
+export function createHeartbeat({ clients, intervalMs = HEARTBEAT_INTERVAL_MS }) {
+  return setInterval(() => sweepHeartbeats(clients), intervalMs);
+}
+
 wss.on('connection', createAuthGate({
   verifyToken: verifySessionToken,
   getLiveSession: getLiveSessionForUser,
@@ -339,6 +369,13 @@ export const broadcastToSession = createBroadcaster({
 });
 
 export const notifySessionEnded = createSessionEndedNotifier({ clients: gatewayClients });
+
+const heartbeatInterval = createHeartbeat({ clients: gatewayClients });
+// Doesn't keep the process alive on its own - the listening httpServer already
+// does that once startGateway() runs. Without this, merely importing this
+// module (e.g. from tests that never call startGateway()) leaves a live timer
+// with nothing else running, and the process never exits.
+heartbeatInterval.unref();
 
 export function startGateway() {
   httpServer.listen(PORT_NUMBER);
