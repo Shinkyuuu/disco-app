@@ -176,7 +176,9 @@ export default function ChatMenuView({ params }) {
                 )}
                 {sections.collapse && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatCollapsed ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatCollapsed: !settings.chatCollapsed })}
                   >
                     {settings.chatCollapsed ? 'Show chat box' : 'Hide chat box'}
@@ -189,13 +191,18 @@ export default function ChatMenuView({ params }) {
               <>
                 <DropdownMenu.Label className="window-menu-label">Overlay</DropdownMenu.Label>
                 {sections.pin && (
-                  <DropdownMenu.Item className="window-menu-item" onSelect={togglePin}>
+                  <DropdownMenu.Item
+                    className={pinned ? 'window-menu-item window-menu-item--on' : 'window-menu-item'}
+                    onSelect={togglePin}
+                  >
                     {pinned ? 'Unpin window' : 'Pin window'}
                   </DropdownMenu.Item>
                 )}
                 {sections.lock && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatLocked ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatLocked: !settings.chatLocked })}
                   >
                     {settings.chatLocked ? 'Unlock window' : 'Lock window'}
@@ -203,7 +210,9 @@ export default function ChatMenuView({ params }) {
                 )}
                 {sections.autoWidth && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatAutoWidth ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatAutoWidth: !settings.chatAutoWidth })}
                   >
                     {settings.chatAutoWidth ? 'Disable auto width' : 'Enable auto width'}
@@ -211,7 +220,9 @@ export default function ChatMenuView({ params }) {
                 )}
                 {sections.snapToEdge && (
                   <DropdownMenu.Item
-                    className="window-menu-item"
+                    className={
+                      settings.chatSnapToEdge ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
+                    }
                     onSelect={() => changeSetting({ chatSnapToEdge: !settings.chatSnapToEdge })}
                   >
                     {settings.chatSnapToEdge ? 'Disable snap to edge' : 'Enable snap to edge'}
