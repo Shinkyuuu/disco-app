@@ -169,6 +169,13 @@ function startWsClient() {
       // a join/leave changes that fit, so re-apply immediately rather than
       // waiting for the next settings change or window reopen.
       if (store.get('chatAutoWidth') && chatWindow) applyChatWindowSize(chatWindow);
+      // Every roster message - not just the first - means this connection is
+      // live and authenticated, so it always clears a reconnecting/unreachable
+      // banner left over from an earlier drop. Without this, a reconnect after
+      // the initial connect would keep resuming speaking/transcript normally
+      // while the banner stayed stuck forever, since nothing else ever moves
+      // the state back to 'connected'.
+      setConnectionState({ status: 'connected' });
       // The first roster message is the server's actual "you're authenticated
       // and in the tracked channel" signal - the raw socket's 'open' event
       // (below) fires the instant the TCP connection completes and the auth
@@ -177,10 +184,7 @@ function startWsClient() {
       // moments before an invalid attempt's real 4001/4002/4003 close arrives,
       // which would have already opened the chat window on a connection that
       // was never actually authorized.
-      if (!settled) {
-        setConnectionState({ status: 'connected' });
-        settle({ ok: true });
-      }
+      if (!settled) settle({ ok: true });
     });
     client.on('speaking', (event) => broadcastToRenderers('speaking', event));
     client.on('transcript', (event) => {
@@ -921,7 +925,11 @@ function transitionToLauncher() {
 function setupAutoUpdater() {
   const betaUpdates = store.get('betaUpdates');
   autoUpdater.allowPrerelease = betaUpdates;
-  autoUpdater.channel = betaUpdates ? 'beta' : null;
+  // Must be a non-null override: electron-updater resolves the channel as
+  // `updater.channel || options.channel`, so `null` falls through to whatever
+  // channel was baked into this install's app-update.yml at build time (e.g.
+  // 'beta' for builds from the beta pipeline), instead of forcing 'latest'.
+  autoUpdater.channel = betaUpdates ? 'beta' : 'latest';
 
   autoUpdater.on('update-not-available', () => {
     transitionToLauncher();
