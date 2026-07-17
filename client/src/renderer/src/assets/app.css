@@ -712,7 +712,10 @@ input {
 
 .chat-status-banner p {
   margin: 0;
-  padding-left: 12px;
+  /* Extra left padding (vs. .error-banner p's 12px) clears the ⋯ button
+     (.window-menu, left:6px) that floats over this banner's bottom-left
+     corner - without it, the button covers the front of the text. */
+  padding-left: 32px;
   flex: 1;
 }
 
