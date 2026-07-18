@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 
-import { scopeDir, slotDirName, resolveSpeakerProfile } from './profiles.js';
+import { scopeDir, slotDirName, resolveSpeakerProfile, extensionsForKind, STATIC_IMAGE_EXTENSIONS, IMAGE_EXTENSIONS, clearDefaultProfileSpeakingTypeIfActive, clearFriendProfileSpeakingTypeIfActive } from './profiles.js';
 
 test('scopeDir joins a numeric friend id under the friends subdirectory', () => {
   assert.equal(
@@ -94,4 +94,44 @@ test("resolveSpeakerProfile never returns local avatar images for the logged-in 
   assert.equal(profile.isFriendOverride, false);
   assert.equal(profile.usernameColor, '#123456');
   assert.equal(profile.chatColor, '#abcdef');
+});
+
+test('extensionsForKind excludes .gif for silent and speaking-image, allows it for speaking-gif', () => {
+  assert.deepEqual(extensionsForKind('silent'), STATIC_IMAGE_EXTENSIONS);
+  assert.deepEqual(extensionsForKind('speaking-image'), STATIC_IMAGE_EXTENSIONS);
+  assert.deepEqual(extensionsForKind('speaking-gif'), IMAGE_EXTENSIONS);
+});
+
+function fakeStoreWithProfiles({ defaultProfiles = [], friendProfiles = {} } = {}) {
+  return {
+    get: (key) => (key === 'defaultProfiles' ? defaultProfiles : key === 'friendProfiles' ? friendProfiles : undefined),
+    set: (key, value) => {
+      if (key === 'defaultProfiles') defaultProfiles = value;
+      if (key === 'friendProfiles') friendProfiles = value;
+    },
+  };
+}
+
+test('clearDefaultProfileSpeakingTypeIfActive nulls speakingAvatarType when it matches the cleared type', () => {
+  const store = fakeStoreWithProfiles({ defaultProfiles: [{ usernameColor: null, chatColor: null, speakingAvatarType: 'gif' }] });
+  clearDefaultProfileSpeakingTypeIfActive(store, 0, 'gif');
+  assert.equal(store.get('defaultProfiles')[0].speakingAvatarType, null);
+});
+
+test('clearDefaultProfileSpeakingTypeIfActive leaves speakingAvatarType alone when it does not match the cleared type', () => {
+  const store = fakeStoreWithProfiles({ defaultProfiles: [{ usernameColor: null, chatColor: null, speakingAvatarType: 'image' }] });
+  clearDefaultProfileSpeakingTypeIfActive(store, 0, 'gif');
+  assert.equal(store.get('defaultProfiles')[0].speakingAvatarType, 'image');
+});
+
+test('clearFriendProfileSpeakingTypeIfActive nulls speakingAvatarType when it matches the cleared type', () => {
+  const store = fakeStoreWithProfiles({ friendProfiles: { 'friend-1': { usernameColor: null, chatColor: null, speakingAvatarType: 'frames' } } });
+  clearFriendProfileSpeakingTypeIfActive(store, 'friend-1', 'frames');
+  assert.equal(store.get('friendProfiles')['friend-1'].speakingAvatarType, null);
+});
+
+test('clearFriendProfileSpeakingTypeIfActive leaves speakingAvatarType alone when it does not match the cleared type', () => {
+  const store = fakeStoreWithProfiles({ friendProfiles: { 'friend-1': { usernameColor: null, chatColor: null, speakingAvatarType: 'frames' } } });
+  clearFriendProfileSpeakingTypeIfActive(store, 'friend-1', 'gif');
+  assert.equal(store.get('friendProfiles')['friend-1'].speakingAvatarType, 'frames');
 });
