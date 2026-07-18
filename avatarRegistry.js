@@ -87,10 +87,31 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return `${cdnBaseUrl}/${objectKey(userId, entry.version, `speaking-${activeType}`, entry.ext)}`;
   }
 
+  // Unlike speakingUrlFor (which only resolves the single active variant, for
+  // broadcasting to other viewers), this exposes all three variants plus
+  // which is active - needed by the avatar owner's own Settings UI to render
+  // three tabs. Additive-only: never consumed by the roster-broadcast path.
+  function speakingVariantsFor(userId, manifest) {
+    const speaking = manifest?.speaking;
+    const activeType = speaking?.activeType ?? null;
+    const variantURL = (type) => {
+      const entry = speaking?.[type];
+      if (!entry) return null;
+      return `${cdnBaseUrl}/${objectKey(userId, entry.version, `speaking-${type}`, entry.ext)}`;
+    };
+    return {
+      activeType,
+      image: variantURL('image'),
+      gif: variantURL('gif'),
+      frames: speaking?.frames ? { url: variantURL('frames'), fps: speaking.frames.fps, frameCount: speaking.frames.frameCount } : null,
+    };
+  }
+
   function urlsFromManifest(userId, manifest) {
     return {
       silentURL: urlFor(userId, manifest, 'silent'),
       speakingURL: speakingUrlFor(userId, manifest),
+      speakingVariants: speakingVariantsFor(userId, manifest),
       usernameColor: manifest?.usernameColor ?? null,
       chatColor: manifest?.chatColor ?? null,
     };

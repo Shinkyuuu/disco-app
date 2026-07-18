@@ -387,7 +387,40 @@ test('GET /api/avatar/me returns 200 with silentURL/speakingURL for a valid toke
   const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer good-token' } });
   const body = await res.json();
   assert.equal(res.status, 200);
-  assert.deepEqual(body, { silentURL: 'https://cdn/silent.png', speakingURL: 'https://cdn/speaking.png' });
+  assert.deepEqual(body, {
+    silentURL: 'https://cdn/silent.png',
+    speakingURL: 'https://cdn/speaking.png',
+    speakingVariants: { activeType: null, image: null, gif: null, frames: null },
+  });
+  server.close();
+});
+
+test('GET /api/avatar/me returns 200 with speakingVariants for a valid token', async () => {
+  const handler = createAvatarMeHandler({
+    verifyToken: () => 'user-1',
+    resolveAvatarUrls: async (userId) =>
+      userId === 'user-1'
+        ? {
+            silentURL: 'https://cdn/silent.png',
+            speakingURL: 'https://cdn/speaking-frames.gif',
+            speakingVariants: { activeType: 'frames', image: null, gif: null, frames: { url: 'https://cdn/speaking-frames.gif', fps: 6, frameCount: 12 } },
+          }
+        : null,
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer good-token' } });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body.speakingVariants, { activeType: 'frames', image: null, gif: null, frames: { url: 'https://cdn/speaking-frames.gif', fps: 6, frameCount: 12 } });
+  server.close();
+});
+
+test('GET /api/avatar/me returns an all-null speakingVariants when no avatar has been set', async () => {
+  const handler = createAvatarMeHandler({ verifyToken: () => 'user-1', resolveAvatarUrls: async () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer tok' } });
+  const body = await res.json();
+  assert.deepEqual(body.speakingVariants, { activeType: null, image: null, gif: null, frames: null });
   server.close();
 });
 
@@ -397,7 +430,11 @@ test('GET /api/avatar/me returns 200 with nulls when no avatar has been set', as
   const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer tok' } });
   const body = await res.json();
   assert.equal(res.status, 200);
-  assert.deepEqual(body, { silentURL: null, speakingURL: null });
+  assert.deepEqual(body, {
+    silentURL: null,
+    speakingURL: null,
+    speakingVariants: { activeType: null, image: null, gif: null, frames: null },
+  });
   server.close();
 });
 
