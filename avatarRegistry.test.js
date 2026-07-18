@@ -277,6 +277,41 @@ test('clearAvatar nulls silent while leaving speaking intact', async () => {
   assert.equal(manifest.silent, null);
 });
 
+test('clearAvatar nulls only the cleared speaking variant, leaving other variants intact', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking-gif.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+  await registry.confirmUpload('user-1', 'speaking-gif', 'bbb', 'gif');
+
+  await registry.clearAvatar('user-1', 'speaking-gif');
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.deepEqual(manifest.speaking.image, { version: 'aaa', ext: 'png' });
+  assert.equal(manifest.speaking.gif, null);
+});
+
+test('clearAvatar nulls activeType when the active variant is cleared, without falling back to another populated variant', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking-gif.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+  await registry.confirmUpload('user-1', 'speaking-gif', 'bbb', 'gif'); // becomes active
+
+  await registry.clearAvatar('user-1', 'speaking-gif');
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.equal(manifest.speaking.activeType, null);
+  // No active speaking variant and no silent/colors means hasAnyProfileData
+  // is false, so the whole cache entry collapses to null (same convention as
+  // "clearAvatar caches null once both states are cleared" below) - it does
+  // not fall back to a non-null object with speakingURL: null.
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached, null);
+});
+
 test('clearAvatar caches null (not an object of nulls) once both states are cleared', async () => {
   const objects = new Map();
   const registry = makeRegistry(objects);
@@ -402,4 +437,48 @@ test('clearAvatar still caches null once avatar images AND colors are both empty
   await registry.clearAvatar('user-1', 'silent');
 
   assert.equal(registry.getCachedAvatarUrls('user-1'), null);
+});
+
+test('setActiveSpeakingType switches to an already-populated variant without re-uploading', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking-gif.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+  await registry.confirmUpload('user-1', 'speaking-gif', 'bbb', 'gif'); // becomes active
+
+  const speakingURL = await registry.setActiveSpeakingType('user-1', 'image');
+
+  assert.equal(speakingURL, 'https://cdn.example.com/avatars/user-1/aaa-speaking-image.png');
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/aaa-speaking-image.png');
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.equal(manifest.speaking.activeType, 'image');
+});
+
+test('setActiveSpeakingType rejects a variant with no uploaded content', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+
+  await assert.rejects(() => registry.setActiveSpeakingType('user-1', 'frames'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /No frames speaking avatar/);
+    return true;
+  });
+});
+
+test('setActiveSpeakingType rejects an invalid type', async () => {
+  const registry = makeRegistry();
+  await assert.rejects(() => registry.setActiveSpeakingType('user-1', 'bogus'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /Invalid speaking avatar type/);
+    return true;
+  });
+});
+
+test('setActiveSpeakingType on a user with no manifest at all rejects (nothing populated)', async () => {
+  const registry = makeRegistry();
+  await assert.rejects(() => registry.setActiveSpeakingType('user-never-uploaded', 'image'), AvatarValidationError);
 });

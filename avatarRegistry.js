@@ -202,10 +202,30 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return urls;
   }
 
+  async function setActiveSpeakingType(userId, type) {
+    if (!SPEAKING_AVATAR_TYPES.includes(type)) throw new AvatarValidationError(`Invalid speaking avatar type: ${type}`);
+    const manifest = (await readManifest(userId)) ?? {};
+    if (!manifest.speaking?.[type]) throw new AvatarValidationError(`No ${type} speaking avatar uploaded yet`);
+    manifest.speaking.activeType = type;
+    manifest.updatedAt = Date.now();
+    await writeManifest(userId, manifest);
+
+    const urls = urlsFromManifest(userId, manifest);
+    registry.set(userId, urls);
+    return urls.speakingURL;
+  }
+
   async function clearAvatar(userId, state) {
     if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
     const manifest = (await readManifest(userId)) ?? {};
-    manifest[state] = null;
+    if (state === 'silent') {
+      manifest.silent = null;
+    } else {
+      const variant = state.slice('speaking-'.length);
+      manifest.speaking = manifest.speaking ?? {};
+      manifest.speaking[variant] = null;
+      if (manifest.speaking.activeType === variant) manifest.speaking.activeType = null;
+    }
     manifest.updatedAt = Date.now();
     await writeManifest(userId, manifest);
 
@@ -213,7 +233,7 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     registry.set(userId, hasAnyProfileData(urls) ? urls : null);
   }
 
-  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar, setProfileColors };
+  return { requestUploadUrl, confirmUpload, setActiveSpeakingType, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar, setProfileColors };
 }
 
 const { AWS_REGION, S3_AVATAR_BUCKET, AVATAR_CDN_BASE_URL } = process.env;
