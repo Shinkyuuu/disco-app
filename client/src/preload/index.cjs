@@ -65,6 +65,8 @@ contextBridge.exposeInMainWorld('api', {
   setFriendProfileColors: (userId, colors) => ipcRenderer.invoke('set-friend-profile-colors', { userId, colors }),
   removeFriendProfile: (userId) => ipcRenderer.invoke('remove-friend-profile', userId),
   uploadBroadcastAvatar: (kind) => ipcRenderer.invoke('upload-broadcast-avatar', kind),
+  uploadBroadcastFramesAvatar: (frameFilePaths, fps) => ipcRenderer.invoke('upload-broadcast-frames-avatar', { frameFilePaths, fps }),
+  setBroadcastSpeakingType: (type) => ipcRenderer.invoke('set-broadcast-speaking-type', type),
   clearBroadcastAvatar: (kind) => ipcRenderer.invoke('clear-broadcast-avatar', kind),
   getBroadcastAvatar: () => ipcRenderer.invoke('get-broadcast-avatar'),
   setPublicColors: (colors) => ipcRenderer.invoke('set-public-colors', colors),

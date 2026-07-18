@@ -59,6 +59,7 @@ import {
   slotDirName,
   pickImageFileForBroadcast,
   MIME_BY_EXT,
+  MAX_ENCODED_GIF_BYTES,
 } from './profiles.js';
 import {
   requestAvatarUploadUrl,
@@ -67,7 +68,9 @@ import {
   uploadFileToPresignedUrl,
   getBroadcastAvatarUrls,
   setPublicColors,
+  setActiveSpeakingAvatarType,
 } from './avatarClient.js';
+import { encodeFramesToGif, GifEncodingError } from './gifEncoder.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTOCOL = 'disco';
@@ -864,6 +867,35 @@ function registerIpcHandlers() {
     await uploadFileToPresignedUrl({ uploadUrl, fileBuffer, contentType });
     const { avatarUrl } = await confirmAvatarUpload({ serverAddress: SERVER_ADDRESS, token, state: kind, version, ext });
     return avatarUrl;
+  });
+
+  ipcMain.handle('upload-broadcast-frames-avatar', async (_event, { frameFilePaths, fps }) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+
+    const gifBytes = await encodeFramesToGif(frameFilePaths, fps);
+    if (gifBytes.length > MAX_ENCODED_GIF_BYTES) {
+      throw new GifEncodingError(`Encoded GIF is ${gifBytes.length} bytes, exceeding the ${MAX_ENCODED_GIF_BYTES}-byte avatar upload limit`);
+    }
+
+    const { uploadUrl, version } = await requestAvatarUploadUrl({ serverAddress: SERVER_ADDRESS, token, state: 'speaking-frames', ext: 'gif' });
+    await uploadFileToPresignedUrl({ uploadUrl, fileBuffer: gifBytes, contentType: 'image/gif' });
+    const { avatarUrl } = await confirmAvatarUpload({
+      serverAddress: SERVER_ADDRESS,
+      token,
+      state: 'speaking-frames',
+      version,
+      ext: 'gif',
+      fps,
+      frameCount: frameFilePaths.length,
+    });
+    return avatarUrl;
+  });
+
+  ipcMain.handle('set-broadcast-speaking-type', async (_event, type) => {
+    const token = store.get('sessionToken');
+    if (!token) throw new Error('Not logged in');
+    return setActiveSpeakingAvatarType({ serverAddress: SERVER_ADDRESS, token, type });
   });
 
   ipcMain.handle('clear-broadcast-avatar', async (_event, kind) => {
