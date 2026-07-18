@@ -17,7 +17,7 @@
 import 'dotenv/config';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
+import { createAvatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, ALLOWED_STATIC_AVATAR_EXTENSIONS, SPEAKING_AVATAR_TYPES, extensionsForState, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
 
 function fakeS3({ objects = new Map() } = {}) {
   return {
@@ -65,9 +65,18 @@ function makeRegistry(objects) {
   });
 }
 
-test('ALLOWED_AVATAR_STATES and ALLOWED_AVATAR_EXTENSIONS are the expected fixed sets', () => {
-  assert.deepEqual(ALLOWED_AVATAR_STATES, ['silent', 'speaking']);
+test('ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, and ALLOWED_STATIC_AVATAR_EXTENSIONS are the expected fixed sets', () => {
+  assert.deepEqual(ALLOWED_AVATAR_STATES, ['silent', 'speaking-image', 'speaking-gif', 'speaking-frames']);
+  assert.deepEqual(SPEAKING_AVATAR_TYPES, ['image', 'gif', 'frames']);
   assert.deepEqual(ALLOWED_AVATAR_EXTENSIONS, ['png', 'jpg', 'jpeg', 'webp', 'gif']);
+  assert.deepEqual(ALLOWED_STATIC_AVATAR_EXTENSIONS, ['png', 'jpg', 'jpeg', 'webp']);
+});
+
+test('extensionsForState excludes .gif for silent and speaking-image, allows it for speaking-gif and speaking-frames', () => {
+  assert.deepEqual(extensionsForState('silent'), ALLOWED_STATIC_AVATAR_EXTENSIONS);
+  assert.deepEqual(extensionsForState('speaking-image'), ALLOWED_STATIC_AVATAR_EXTENSIONS);
+  assert.deepEqual(extensionsForState('speaking-gif'), ALLOWED_AVATAR_EXTENSIONS);
+  assert.deepEqual(extensionsForState('speaking-frames'), ALLOWED_AVATAR_EXTENSIONS);
 });
 
 test('requestUploadUrl returns a signed URL scoped to a versioned key and a version token', async () => {
@@ -93,6 +102,21 @@ test('requestUploadUrl rejects an invalid extension', async () => {
     assert.match(err.message, /Invalid avatar extension/);
     return true;
   });
+});
+
+test('requestUploadUrl rejects a .gif extension for silent (must stay static)', async () => {
+  const registry = makeRegistry();
+  await assert.rejects(() => registry.requestUploadUrl('user-1', 'silent', 'gif'), (err) => {
+    assert.ok(err instanceof AvatarValidationError);
+    assert.match(err.message, /Invalid avatar extension/);
+    return true;
+  });
+});
+
+test('requestUploadUrl accepts a .gif extension for speaking-gif', async () => {
+  const registry = makeRegistry();
+  const { uploadUrl } = await registry.requestUploadUrl('user-1', 'speaking-gif', 'gif');
+  assert.match(uploadUrl, /speaking-gif\.gif/);
 });
 
 test('confirmUpload validates the object landed, writes the manifest, and updates the in-memory cache', async () => {
@@ -140,18 +164,57 @@ test('confirmUpload throws when the uploaded object exceeds the size limit', asy
   );
 });
 
-test('confirmUpload for speaking preserves an already-confirmed silent entry in the manifest', async () => {
+test('confirmUpload for a speaking variant preserves an already-confirmed silent entry in the manifest', async () => {
   const objects = new Map();
   const registry = makeRegistry(objects);
   objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
   await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
 
-  objects.set('avatars/user-1/bbb-speaking.jpg', { body: Buffer.alloc(100) });
-  await registry.confirmUpload('user-1', 'speaking', 'bbb', 'jpg');
+  objects.set('avatars/user-1/bbb-speaking-image.jpg', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'bbb', 'jpg');
 
   const cached = registry.getCachedAvatarUrls('user-1');
   assert.equal(cached.silentURL, 'https://cdn.example.com/avatars/user-1/aaa-silent.png');
-  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking.jpg');
+  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking-image.jpg');
+});
+
+test('confirmUpload for a speaking variant sets it as the active type', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/bbb-speaking-gif.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-gif', 'bbb', 'gif');
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.equal(manifest.speaking.activeType, 'gif');
+  assert.deepEqual(manifest.speaking.gif, { version: 'bbb', ext: 'gif' });
+});
+
+test('confirmUpload for a new speaking variant does not clobber a previously-uploaded variant, but does become the active one', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+
+  objects.set('avatars/user-1/bbb-speaking-gif.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-gif', 'bbb', 'gif');
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.deepEqual(manifest.speaking.image, { version: 'aaa', ext: 'png' });
+  assert.deepEqual(manifest.speaking.gif, { version: 'bbb', ext: 'gif' });
+  assert.equal(manifest.speaking.activeType, 'gif');
+
+  const cached = registry.getCachedAvatarUrls('user-1');
+  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking-gif.gif');
+});
+
+test('confirmUpload for speaking-frames stores fps and frameCount alongside version/ext', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/ccc-speaking-frames.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-frames', 'ccc', 'gif', { fps: 6, frameCount: 12 });
+
+  const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
+  assert.deepEqual(manifest.speaking.frames, { version: 'ccc', ext: 'gif', fps: 6, frameCount: 12 });
 });
 
 test('resolveAvatarUrls returns cached urls without touching S3 when already resolved', async () => {
@@ -197,19 +260,19 @@ test('resolveAvatarUrls caches null for a user with no manifest, and never re-fe
   assert.equal(second, null);
 });
 
-test('clearAvatar nulls one state while leaving the other intact', async () => {
+test('clearAvatar nulls silent while leaving speaking intact', async () => {
   const objects = new Map();
   const registry = makeRegistry(objects);
   objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
-  objects.set('avatars/user-1/bbb-speaking.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking-image.png', { body: Buffer.alloc(100) });
   await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
-  await registry.confirmUpload('user-1', 'speaking', 'bbb', 'png');
+  await registry.confirmUpload('user-1', 'speaking-image', 'bbb', 'png');
 
   await registry.clearAvatar('user-1', 'silent');
 
   const cached = registry.getCachedAvatarUrls('user-1');
   assert.equal(cached.silentURL, null);
-  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking.png');
+  assert.equal(cached.speakingURL, 'https://cdn.example.com/avatars/user-1/bbb-speaking-image.png');
   const manifest = JSON.parse(objects.get('avatars/user-1/manifest.json').body);
   assert.equal(manifest.silent, null);
 });
