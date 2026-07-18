@@ -19,7 +19,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_BYTES, MIN_FPS, MAX_FPS, validateFrameInputs } from './gifEncoder.js';
+import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_BYTES, MIN_FPS, MAX_FPS, validateFrameInputs, encodeFramesToGif } from './gifEncoder.js';
+import { Jimp } from 'jimp';
 
 function tmpFileOfSize(bytes) {
   const filePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gif-test-')), 'frame.png');
@@ -76,4 +77,62 @@ test('validateFrameInputs rejects a frame file over MAX_FRAME_BYTES', () => {
     assert.match(err.message, /exceeding/);
     return true;
   });
+});
+
+// Real GIF89a bytes: writes a synthetic solid-color PNG to a temp file for
+// use as a source frame.
+async function tmpSolidColorPng(width, height, rgba) {
+  const filePath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gif-test-')), 'frame.png');
+  const image = new Jimp({ width, height, color: rgba });
+  await image.write(filePath);
+  return filePath;
+}
+
+// Scans raw GIF bytes for Graphic Control Extension blocks (`21 F9 04 ...`)
+// - one is written per frame by gifenc - and returns each block's stored
+// delay in centiseconds (GIF's native unit), so tests can check both frame
+// count and per-frame timing without a GIF decoder dependency. Block layout:
+// 21 F9 04 <flags:1> <delay:2 LE> <transparent index:1> 00.
+function readGraphicControlExtensions(gifBytes) {
+  const blocks = [];
+  for (let i = 0; i < gifBytes.length - 7; i++) {
+    if (gifBytes[i] === 0x21 && gifBytes[i + 1] === 0xf9 && gifBytes[i + 2] === 0x04) {
+      const delayCentiseconds = gifBytes[i + 4] | (gifBytes[i + 5] << 8);
+      blocks.push({ delayCentiseconds });
+    }
+  }
+  return blocks;
+}
+
+test('encodeFramesToGif produces a valid GIF89a with one frame per source image', async () => {
+  const frames = await Promise.all([
+    tmpSolidColorPng(4, 4, 0xff0000ff),
+    tmpSolidColorPng(4, 4, 0x00ff00ff),
+    tmpSolidColorPng(4, 4, 0x0000ffff),
+  ]);
+
+  const gifBytes = await encodeFramesToGif(frames, 6);
+
+  assert.equal(gifBytes.subarray(0, 6).toString('ascii'), 'GIF89a');
+  const blocks = readGraphicControlExtensions(gifBytes);
+  assert.equal(blocks.length, 3);
+});
+
+test('encodeFramesToGif stores the delay implied by fps, in GIF centiseconds', async () => {
+  const frames = await Promise.all([tmpSolidColorPng(2, 2, 0xff0000ff), tmpSolidColorPng(2, 2, 0x00ff00ff)]);
+
+  const gifBytes = await encodeFramesToGif(frames, 6);
+
+  // fps=6 -> 1000/6 = 166.67ms/frame -> gifenc rounds to 167ms -> GIF stores
+  // centiseconds: round(167/10) = 17.
+  const expectedCentiseconds = Math.round(Math.round(1000 / 6) / 10);
+  const blocks = readGraphicControlExtensions(gifBytes);
+  assert.ok(blocks.length > 0);
+  for (const block of blocks) {
+    assert.equal(block.delayCentiseconds, expectedCentiseconds);
+  }
+});
+
+test('encodeFramesToGif rejects invalid inputs before doing any decoding work', async () => {
+  await assert.rejects(() => encodeFramesToGif([tmpFileOfSize(100)], 6), GifEncodingError);
 });
