@@ -20,7 +20,8 @@ import path from 'node:path';
 
 const { app, dialog } = electron;
 
-const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+export const STATIC_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
+export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
 export const MIME_BY_EXT = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -28,6 +29,12 @@ export const MIME_BY_EXT = {
   '.webp': 'image/webp',
   '.gif': 'image/gif',
 };
+
+// Silent and the Image speaking-type must stay static (no .gif) - mirrors
+// the server's extensionsForState (avatarRegistry.js) for the same reason.
+export function extensionsForKind(kind) {
+  return kind === 'silent' || kind === 'speaking-image' ? STATIC_IMAGE_EXTENSIONS : IMAGE_EXTENSIONS;
+}
 
 function bundledAvatarsRoot() {
   return path.join(app.getAppPath(), 'resources', 'avatars');
@@ -50,7 +57,8 @@ export function scopeDir(root, scope, id) {
   return path.join(root, sub, id);
 }
 
-// Find silent.* / speaking.* by basename; return absolute path or null.
+// Find <kind>.* by basename; return absolute path or null. `kind` is
+// 'silent', 'speaking-image', 'speaking-gif', or 'speaking-frames'.
 function findAvatarFile(dir, kind) {
   for (const ext of IMAGE_EXTENSIONS) {
     const candidate = path.join(dir, `${kind}${ext}`);
@@ -77,10 +85,39 @@ export function slotDirName(slotIndex) {
   return String(slotIndex + 1).padStart(2, '0');
 }
 
-function readImagesFor(scope, id) {
+// avatarSpeaking resolves from whichever variant `speakingAvatarType` names
+// ('image'|'gif'|'frames'|null) - the other two saved-but-inactive variants
+// stay on disk untouched (Section 3.1 of the design spec: switching types
+// never discards the others).
+function readImagesFor(scope, id, speakingAvatarType) {
   return {
     avatarSilent: readAvatarDataUrl(scope, id, 'silent'),
-    avatarSpeaking: readAvatarDataUrl(scope, id, 'speaking'),
+    avatarSpeaking: speakingAvatarType ? readAvatarDataUrl(scope, id, `speaking-${speakingAvatarType}`) : null,
+  };
+}
+
+function readFramesMeta(scope, id) {
+  const dir = scopeDir(userAvatarsRoot(), scope, id);
+  const bundledDir = scopeDir(bundledAvatarsRoot(), scope, id);
+  const metaPath = [dir, bundledDir].map((d) => path.join(d, 'speaking-frames.meta.json')).find((p) => fs.existsSync(p));
+  return metaPath ? JSON.parse(fs.readFileSync(metaPath, 'utf8')) : null;
+}
+
+// Unlike readImagesFor (which only resolves the single active variant, for
+// the roster/preview render path), this exposes all three speaking variants
+// plus which is active - needed by the Settings UI to render three tabs
+// with correct populated/active state. Mirrors the server's
+// speakingVariantsFor (avatarRegistry.js, Plan 2 Task 4) for the same reason.
+function speakingVariantsFor(scope, id, speakingAvatarType) {
+  const image = readAvatarDataUrl(scope, id, 'speaking-image');
+  const gif = readAvatarDataUrl(scope, id, 'speaking-gif');
+  const framesUrl = readAvatarDataUrl(scope, id, 'speaking-frames');
+  const meta = framesUrl ? readFramesMeta(scope, id) : null;
+  return {
+    activeType: speakingAvatarType ?? null,
+    image,
+    gif,
+    frames: framesUrl && meta ? { url: framesUrl, fps: meta.fps, frameCount: meta.frameCount } : null,
   };
 }
 
@@ -134,7 +171,7 @@ export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
   const friend = store.get('friendProfiles')[speakerId];
   if (friend) {
     return {
-      ...(isSelf ? { avatarSilent: null, avatarSpeaking: null } : readImagesFor('friend', speakerId)),
+      ...(isSelf ? { avatarSilent: null, avatarSpeaking: null } : readImagesFor('friend', speakerId, friend.speakingAvatarType)),
       usernameColor: friend.usernameColor ?? null,
       chatColor: friend.chatColor ?? null,
       isFriendOverride: !isSelf,
@@ -143,7 +180,7 @@ export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
   if (slotIndex >= 0 && slotIndex < 10) {
     const slot = store.get('defaultProfiles')[slotIndex] ?? { usernameColor: null, chatColor: null };
     return {
-      ...readImagesFor('default', slotDirName(slotIndex)),
+      ...readImagesFor('default', slotDirName(slotIndex), slot.speakingAvatarType),
       usernameColor: slot.usernameColor ?? null,
       chatColor: slot.chatColor ?? null,
       isFriendOverride: false,
@@ -155,7 +192,8 @@ export function resolveSpeakerProfile(store, { speakerId, slotIndex }) {
 export function getDefaultProfiles(store) {
   const colors = store.get('defaultProfiles');
   return colors.map((slot, i) => ({
-    ...readImagesFor('default', slotDirName(i)),
+    ...readImagesFor('default', slotDirName(i), slot.speakingAvatarType),
+    speakingVariants: speakingVariantsFor('default', slotDirName(i), slot.speakingAvatarType),
     usernameColor: slot.usernameColor ?? null,
     chatColor: slot.chatColor ?? null,
   }));
@@ -164,11 +202,12 @@ export function getDefaultProfiles(store) {
 export function getFriendProfiles(store) {
   const friendProfiles = store.get('friendProfiles');
   const result = {};
-  for (const [id, colors] of Object.entries(friendProfiles)) {
+  for (const [id, profile] of Object.entries(friendProfiles)) {
     result[id] = {
-      ...readImagesFor('friend', id),
-      usernameColor: colors.usernameColor ?? null,
-      chatColor: colors.chatColor ?? null,
+      ...readImagesFor('friend', id, profile.speakingAvatarType),
+      speakingVariants: speakingVariantsFor('friend', id, profile.speakingAvatarType),
+      usernameColor: profile.usernameColor ?? null,
+      chatColor: profile.chatColor ?? null,
     };
   }
   return result;
@@ -177,21 +216,24 @@ export function getFriendProfiles(store) {
 // Shared by pickAvatarImage (local overrides, copies the file into userData)
 // and pickImageFileForBroadcast (server upload, doesn't copy anywhere locally
 // - the caller reads the bytes directly from the returned filePath).
-async function pickAndValidateImageFile(title) {
+async function pickAndValidateImageFile(title, allowedExtensions) {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title,
     properties: ['openFile'],
-    filters: [{ name: 'Images', extensions: IMAGE_EXTENSIONS.map((e) => e.slice(1)) }],
+    filters: [{ name: 'Images', extensions: allowedExtensions.map((e) => e.slice(1)) }],
   });
   if (canceled || filePaths.length === 0) return null;
   const filePath = filePaths[0];
   const ext = path.extname(filePath).toLowerCase();
-  if (!IMAGE_EXTENSIONS.includes(ext)) return null;
+  if (!allowedExtensions.includes(ext)) return null;
   return { filePath, ext: ext.slice(1) }; // ext without the leading dot, matching the server's ALLOWED_AVATAR_EXTENSIONS
 }
 
+// `kind` is 'silent', 'speaking-image', or 'speaking-gif' - 'speaking-frames'
+// is written by saveFramesAvatar (Task 2) instead, since it encodes multiple
+// source files rather than copying one picked file.
 export async function pickAvatarImage({ scope, id, kind }) {
-  const picked = await pickAndValidateImageFile(`Choose ${kind} avatar image`);
+  const picked = await pickAndValidateImageFile(`Choose ${kind} avatar image`, extensionsForKind(kind));
   if (!picked) return null;
   const { filePath: source, ext: extNoDot } = picked;
   const ext = `.${extNoDot}`;
@@ -212,7 +254,7 @@ export async function pickAvatarImage({ scope, id, kind }) {
 // main/index.js's upload-broadcast-avatar IPC handler) reads the bytes
 // itself to hand off to avatarClient.js.
 export async function pickImageFileForBroadcast(kind) {
-  return pickAndValidateImageFile(`Choose ${kind} avatar image to share with others`);
+  return pickAndValidateImageFile(`Choose ${kind} avatar image to share with others`, extensionsForKind(kind));
 }
 
 export function clearAvatarImage({ scope, id, kind }) {
@@ -221,14 +263,44 @@ export function clearAvatarImage({ scope, id, kind }) {
     const file = path.join(dir, `${kind}${ext}`);
     if (fs.existsSync(file)) fs.rmSync(file);
   }
+  if (kind === 'speaking-frames') {
+    const meta = path.join(dir, 'speaking-frames.meta.json');
+    if (fs.existsSync(meta)) fs.rmSync(meta);
+  }
 }
 
 export function setDefaultProfileColors(store, slotIndex, colors) {
   const defaultProfiles = store.get('defaultProfiles').slice();
   defaultProfiles[slotIndex] = {
+    ...defaultProfiles[slotIndex],
     usernameColor: colors.usernameColor ?? null,
     chatColor: colors.chatColor ?? null,
   };
+  store.set('defaultProfiles', defaultProfiles);
+}
+
+// `type` is 'image'|'gif'|'frames'. Throws if that variant's file doesn't
+// exist yet on disk (bundled or user-override) - guards against the
+// "switch tabs" IPC path (Task 3) setting an inconsistent active type.
+export function setDefaultProfileSpeakingType(store, slotIndex, type) {
+  const id = slotDirName(slotIndex);
+  const kind = `speaking-${type}`;
+  if (!findAvatarFile(scopeDir(userAvatarsRoot(), 'default', id), kind) && !findAvatarFile(scopeDir(bundledAvatarsRoot(), 'default', id), kind)) {
+    throw new Error(`No ${type} speaking avatar uploaded yet for default slot ${slotIndex}`);
+  }
+  const defaultProfiles = store.get('defaultProfiles').slice();
+  defaultProfiles[slotIndex] = { ...defaultProfiles[slotIndex], speakingAvatarType: type };
+  store.set('defaultProfiles', defaultProfiles);
+}
+
+// Nulls speakingAvatarType only if it currently equals the just-cleared
+// type - so clearing an inactive variant never disturbs the active one, and
+// there's no automatic fallback to another populated variant (matches the
+// server's clearAvatar behavior, Plan 2 Task 2).
+export function clearDefaultProfileSpeakingTypeIfActive(store, slotIndex, type) {
+  const defaultProfiles = store.get('defaultProfiles').slice();
+  if (defaultProfiles[slotIndex]?.speakingAvatarType !== type) return;
+  defaultProfiles[slotIndex] = { ...defaultProfiles[slotIndex], speakingAvatarType: null };
   store.set('defaultProfiles', defaultProfiles);
 }
 
@@ -242,8 +314,23 @@ export function setFriendProfileColors(store, userId, colors) {
   const friendProfiles = store.get('friendProfiles');
   store.set('friendProfiles', {
     ...friendProfiles,
-    [userId]: { usernameColor: colors.usernameColor ?? null, chatColor: colors.chatColor ?? null },
+    [userId]: { ...friendProfiles[userId], usernameColor: colors.usernameColor ?? null, chatColor: colors.chatColor ?? null },
   });
+}
+
+export function setFriendProfileSpeakingType(store, userId, type) {
+  const kind = `speaking-${type}`;
+  if (!findAvatarFile(scopeDir(userAvatarsRoot(), 'friend', userId), kind) && !findAvatarFile(scopeDir(bundledAvatarsRoot(), 'friend', userId), kind)) {
+    throw new Error(`No ${type} speaking avatar uploaded yet for friend ${userId}`);
+  }
+  const friendProfiles = store.get('friendProfiles');
+  store.set('friendProfiles', { ...friendProfiles, [userId]: { ...friendProfiles[userId], speakingAvatarType: type } });
+}
+
+export function clearFriendProfileSpeakingTypeIfActive(store, userId, type) {
+  const friendProfiles = store.get('friendProfiles');
+  if (friendProfiles[userId]?.speakingAvatarType !== type) return;
+  store.set('friendProfiles', { ...friendProfiles, [userId]: { ...friendProfiles[userId], speakingAvatarType: null } });
 }
 
 export function removeFriendProfile(store, userId) {
