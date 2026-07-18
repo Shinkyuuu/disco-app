@@ -243,6 +243,37 @@ test('resolveAvatarUrls reads the S3 manifest for a user not yet in the in-memor
   assert.deepEqual(registry.getCachedAvatarUrls('user-2'), urls);
 });
 
+test('resolveAvatarUrls exposes all populated speaking variants, not just the active one', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-speaking-image.png', { body: Buffer.alloc(100) });
+  objects.set('avatars/user-1/bbb-speaking-frames.gif', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'speaking-image', 'aaa', 'png');
+  await registry.confirmUpload('user-1', 'speaking-frames', 'bbb', 'gif', { fps: 6, frameCount: 12 }); // becomes active
+
+  const urls = await registry.resolveAvatarUrls('user-1');
+
+  assert.equal(urls.speakingVariants.activeType, 'frames');
+  assert.equal(urls.speakingVariants.image, 'https://cdn.example.com/avatars/user-1/aaa-speaking-image.png');
+  assert.equal(urls.speakingVariants.gif, null);
+  assert.deepEqual(urls.speakingVariants.frames, {
+    url: 'https://cdn.example.com/avatars/user-1/bbb-speaking-frames.gif',
+    fps: 6,
+    frameCount: 12,
+  });
+});
+
+test('resolveAvatarUrls returns an all-null speakingVariants for a user with no speaking avatar at all', async () => {
+  const objects = new Map();
+  const registry = makeRegistry(objects);
+  objects.set('avatars/user-1/aaa-silent.png', { body: Buffer.alloc(100) });
+  await registry.confirmUpload('user-1', 'silent', 'aaa', 'png');
+
+  const urls = await registry.resolveAvatarUrls('user-1');
+
+  assert.deepEqual(urls.speakingVariants, { activeType: null, image: null, gif: null, frames: null });
+});
+
 test('resolveAvatarUrls caches null for a user with no manifest, and never re-fetches', async () => {
   const objects = new Map();
   const registry = makeRegistry(objects);

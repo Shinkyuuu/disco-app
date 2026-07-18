@@ -326,7 +326,11 @@ export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
     }
     const urls = await resolveAvatarUrls(userId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ silentURL: urls?.silentURL ?? null, speakingURL: urls?.speakingURL ?? null }));
+    res.end(JSON.stringify({
+      silentURL: urls?.silentURL ?? null,
+      speakingURL: urls?.speakingURL ?? null,
+      speakingVariants: urls?.speakingVariants ?? { activeType: null, image: null, gif: null, frames: null },
+    }));
   };
 }
 
