@@ -46,6 +46,12 @@ import {
   getFriendProfiles,
   pickAvatarImage,
   clearAvatarImage,
+  saveFramesAvatar,
+  pickFrameSourceImages,
+  setDefaultProfileSpeakingType,
+  setFriendProfileSpeakingType,
+  clearDefaultProfileSpeakingTypeIfActive,
+  clearFriendProfileSpeakingTypeIfActive,
   setDefaultProfileColors,
   addFriendProfile,
   setFriendProfileColors,
@@ -800,23 +806,42 @@ function registerIpcHandlers() {
   ipcMain.handle('resolve-speaker-profile', (_event, args) => resolveSpeakerProfile(store, args));
   ipcMain.handle('get-default-profiles', () => getDefaultProfiles(store));
   ipcMain.handle('get-friend-profiles', () => getFriendProfiles(store));
-  ipcMain.handle('pick-default-avatar-image', (_event, { slotIndex, kind }) =>
-    pickAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind }),
-  );
+  ipcMain.handle('pick-default-avatar-image', async (_event, { slotIndex, kind }) => {
+    const dataUrl = await pickAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind });
+    if (dataUrl && kind.startsWith('speaking-')) setDefaultProfileSpeakingType(store, slotIndex, kind.slice('speaking-'.length));
+    return dataUrl;
+  });
   ipcMain.handle('pick-friend-avatar-image', async (_event, { userId, kind }) => {
     const dataUrl = await pickAvatarImage({ scope: 'friend', id: userId, kind });
     // A picked image alone should make this user "have a profile" so
     // getFriendProfiles lists them (and the preview persists) even before any
     // color is set - mirrors reconciliation for hand-created folders.
     if (dataUrl) addFriendProfile(store, userId);
+    if (dataUrl && kind.startsWith('speaking-')) setFriendProfileSpeakingType(store, userId, kind.slice('speaking-'.length));
     return dataUrl;
   });
-  ipcMain.handle('clear-default-avatar-image', (_event, { slotIndex, kind }) =>
-    clearAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind }),
+  ipcMain.handle('clear-default-avatar-image', (_event, { slotIndex, kind }) => {
+    clearAvatarImage({ scope: 'default', id: slotDirName(slotIndex), kind });
+    if (kind.startsWith('speaking-')) clearDefaultProfileSpeakingTypeIfActive(store, slotIndex, kind.slice('speaking-'.length));
+  });
+  ipcMain.handle('clear-friend-avatar-image', (_event, { userId, kind }) => {
+    clearAvatarImage({ scope: 'friend', id: userId, kind });
+    if (kind.startsWith('speaking-')) clearFriendProfileSpeakingTypeIfActive(store, userId, kind.slice('speaking-'.length));
+  });
+
+  ipcMain.handle('pick-frame-source-images', () => pickFrameSourceImages());
+
+  ipcMain.handle('save-default-frames-avatar', (_event, { slotIndex, frameFilePaths, fps }) =>
+    saveFramesAvatar({ store, scope: 'default', id: slotDirName(slotIndex), frameFilePaths, fps }),
   );
-  ipcMain.handle('clear-friend-avatar-image', (_event, { userId, kind }) =>
-    clearAvatarImage({ scope: 'friend', id: userId, kind }),
-  );
+  ipcMain.handle('save-friend-frames-avatar', async (_event, { userId, frameFilePaths, fps }) => {
+    const dataUrl = await saveFramesAvatar({ store, scope: 'friend', id: userId, frameFilePaths, fps });
+    addFriendProfile(store, userId);
+    return dataUrl;
+  });
+
+  ipcMain.handle('set-default-avatar-type', (_event, { slotIndex, type }) => setDefaultProfileSpeakingType(store, slotIndex, type));
+  ipcMain.handle('set-friend-avatar-type', (_event, { userId, type }) => setFriendProfileSpeakingType(store, userId, type));
   ipcMain.handle('set-default-profile-colors', (_event, { slotIndex, colors }) =>
     setDefaultProfileColors(store, slotIndex, colors),
   );
