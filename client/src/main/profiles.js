@@ -17,6 +17,7 @@
 import electron from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { encodeFramesToGif, GifEncodingError } from './gifEncoder.js';
 
 const { app, dialog } = electron;
 
@@ -255,6 +256,59 @@ export async function pickAvatarImage({ scope, id, kind }) {
 // itself to hand off to avatarClient.js.
 export async function pickImageFileForBroadcast(kind) {
   return pickAndValidateImageFile(`Choose ${kind} avatar image to share with others`, extensionsForKind(kind));
+}
+
+// Matches the server's MAX_AVATAR_BYTES (avatarRegistry.js) - checked
+// client-side right after encoding so an oversized Frames set fails fast
+// instead of only being discovered after a round-trip to S3 (broadcast path,
+// Task 5) or a wasted local write (this function).
+export const MAX_ENCODED_GIF_BYTES = 5 * 1024 * 1024;
+
+// Multi-select dialog for building a Frames set - source images only
+// (STATIC_IMAGE_EXTENSIONS), so an animated file can't sneak in as a "frame."
+// Returns both the real path (needed later to read bytes for encoding) and a
+// data: URL preview read eagerly here, since the renderer's CSP has no
+// file: in img-src (client/src/renderer/index.html:13) and so cannot render
+// a bare file:// path as a thumbnail.
+export async function pickFrameSourceImages() {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: 'Choose frame images',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Images', extensions: STATIC_IMAGE_EXTENSIONS.map((e) => e.slice(1)) }],
+  });
+  if (canceled) return [];
+  return filePaths
+    .filter((p) => STATIC_IMAGE_EXTENSIONS.includes(path.extname(p).toLowerCase()))
+    .map((filePath) => {
+      const mime = MIME_BY_EXT[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
+      const previewUrl = `data:${mime};base64,${fs.readFileSync(filePath).toString('base64')}`;
+      return { path: filePath, previewUrl };
+    });
+}
+
+// Encodes frameFilePaths into a GIF (Plan 1), writes it as this profile's
+// speaking-frames variant plus a display-only {fps, frameCount} sidecar (the
+// GIF itself is the source of truth for playback - the sidecar exists only
+// so Settings can show "6 fps - 12 frames" without decoding it), and
+// activates it. Raw source frames are not retained - re-editing means
+// re-picking from scratch (Section 3.1 of the design spec).
+export async function saveFramesAvatar({ store, scope, id, frameFilePaths, fps }) {
+  const gifBytes = await encodeFramesToGif(frameFilePaths, fps);
+  if (gifBytes.length > MAX_ENCODED_GIF_BYTES) {
+    throw new GifEncodingError(`Encoded GIF is ${gifBytes.length} bytes, exceeding the ${MAX_ENCODED_GIF_BYTES}-byte avatar upload limit`);
+  }
+
+  const dir = scopeDir(userAvatarsRoot(), scope, id);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'speaking-frames.gif'), gifBytes);
+  fs.writeFileSync(path.join(dir, 'speaking-frames.meta.json'), JSON.stringify({ fps, frameCount: frameFilePaths.length }));
+
+  if (scope === 'default') {
+    setDefaultProfileSpeakingType(store, Number(id) - 1, 'frames');
+  } else {
+    setFriendProfileSpeakingType(store, id, 'frames');
+  }
+  return readAvatarDataUrl(scope, id, 'speaking-frames');
 }
 
 export function clearAvatarImage({ scope, id, kind }) {
