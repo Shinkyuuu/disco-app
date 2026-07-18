@@ -1326,6 +1326,67 @@ input {
   margin: 0;
 }
 
+.pf-frame-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 220px;
+  justify-content: center;
+}
+.pf-frame-item {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: grab;
+}
+.pf-frame-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pf-frame-remove {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  border: none;
+  padding: 0;
+}
+.pf-frame-add {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: rgba(109, 94, 252, 0.12);
+  border: 1.5px dashed #6d5efc;
+  color: #6d5efc;
+  font-size: 18px;
+  padding: 0;
+}
+.pf-fps-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.pf-fps-field input {
+  width: 48px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: inherit;
+}
+
 .chat-appearance-fields {
   display: flex;
   flex-direction: column;
