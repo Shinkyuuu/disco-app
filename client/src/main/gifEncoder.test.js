@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_BYTES, MAX_FRAME_DIMENSION, MIN_FPS, MAX_FPS, validateFrameInputs, encodeFramesToGif } from './gifEncoder.js';
+import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_DIMENSION, MIN_FPS, MAX_FPS, validateFrameInputs, encodeFramesToGif } from './gifEncoder.js';
 import { Jimp } from 'jimp';
 
 function tmpFileOfSize(bytes) {
@@ -31,7 +31,6 @@ function tmpFileOfSize(bytes) {
 test('exported bounds match the design spec', () => {
   assert.equal(MIN_FRAMES, 2);
   assert.equal(MAX_FRAMES, 30);
-  assert.equal(MAX_FRAME_BYTES, 2 * 1024 * 1024);
   assert.equal(MIN_FPS, 1);
   assert.equal(MAX_FPS, 30);
 });
@@ -68,15 +67,6 @@ test('validateFrameInputs rejects an out-of-bounds fps', () => {
   const frames = [tmpFileOfSize(100), tmpFileOfSize(100)];
   assert.throws(() => validateFrameInputs(frames, 0), /fps/);
   assert.throws(() => validateFrameInputs(frames, 31), /fps/);
-});
-
-test('validateFrameInputs rejects a frame file over MAX_FRAME_BYTES', () => {
-  const frames = [tmpFileOfSize(100), tmpFileOfSize(MAX_FRAME_BYTES + 1)];
-  assert.throws(() => validateFrameInputs(frames, 6), (err) => {
-    assert.ok(err instanceof GifEncodingError);
-    assert.match(err.message, /exceeding/);
-    return true;
-  });
 });
 
 // Real GIF89a bytes: writes a synthetic solid-color PNG to a temp file for

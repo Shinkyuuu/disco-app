@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-import fs from 'node:fs';
 import { Jimp } from 'jimp';
 import gifenc from 'gifenc';
 
@@ -28,11 +27,14 @@ export class GifEncodingError extends Error {}
 
 export const MIN_FRAMES = 2;
 export const MAX_FRAMES = 30;
-export const MAX_FRAME_BYTES = 2 * 1024 * 1024; // 2MB
 export const MAX_FRAME_DIMENSION = 2048; // output px, per side - frames are downscaled to fit, never rejected for being too large
 export const MIN_FPS = 1;
 export const MAX_FPS = 30;
 
+// No per-file byte-size limit here, to match the Silent/Image/GIF pickers
+// (which have none) - a large source photo's file size says nothing about
+// its resolution, and encodeFramesToGif already downscales to
+// MAX_FRAME_DIMENSION regardless of how big the source file was.
 export function validateFrameInputs(frameFilePaths, fps) {
   const count = frameFilePaths?.length ?? 0;
   if (!Array.isArray(frameFilePaths) || count < MIN_FRAMES || count > MAX_FRAMES) {
@@ -40,12 +42,6 @@ export function validateFrameInputs(frameFilePaths, fps) {
   }
   if (!Number.isInteger(fps) || fps < MIN_FPS || fps > MAX_FPS) {
     throw new GifEncodingError(`fps must be an integer between ${MIN_FPS} and ${MAX_FPS}, got ${fps}`);
-  }
-  for (const filePath of frameFilePaths) {
-    const { size } = fs.statSync(filePath);
-    if (size > MAX_FRAME_BYTES) {
-      throw new GifEncodingError(`Frame ${filePath} is ${size} bytes, exceeding the ${MAX_FRAME_BYTES}-byte limit`);
-    }
   }
 }
 
