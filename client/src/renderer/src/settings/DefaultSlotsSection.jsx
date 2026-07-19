@@ -36,6 +36,9 @@ export default function DefaultSlotsSection({ profiles, onChange }) {
                 profile={profile}
                 onPickAvatar={(kind) => update(() => window.api.pickDefaultAvatarImage(slotIndex, kind))}
                 onClearAvatar={(kind) => update(() => window.api.clearDefaultAvatarImage(slotIndex, kind))}
+                onPickFrames={window.api.pickFrameSourceImages}
+                onSaveFrames={(frameFilePaths, fps) => update(() => window.api.saveDefaultFramesAvatar(slotIndex, frameFilePaths, fps))}
+                onSetSpeakingType={(type) => update(() => window.api.setDefaultAvatarType(slotIndex, type))}
                 onSetColor={(field, value) =>
                   update(() => window.api.setDefaultProfileColors(slotIndex, { ...colorsOf(profile), [field]: value }))
                 }

@@ -212,6 +212,16 @@ input {
   background: #3a3358;
 }
 
+/* Auto width / Snap to edge while Lock window is on - Radix's `disabled`
+   prop already blocks selection and hover/keyboard highlighting, this just
+   makes that state visible. Opacity is independent of `--on`'s
+   background/color, so an already-on setting still reads as tinted-but-dim
+   underneath, not flattened to a plain disabled look. */
+.window-menu-item[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .window-menu-item-arrow {
   opacity: 0.6;
 }
@@ -1324,6 +1334,110 @@ input {
   text-overflow: ellipsis;
   white-space: nowrap;
   margin: 0;
+}
+
+.pf-speaking-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.pf-type-tabs {
+  display: flex;
+  gap: 2px;
+  background: #231d38;
+  border-radius: 6px;
+  padding: 2px;
+}
+.pf-type-tabs--spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+.pf-type-tab {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  border: none;
+}
+.pf-type-tab--filled {
+  color: rgba(255, 255, 255, 0.85);
+}
+.pf-type-tab--active {
+  background: #6d5efc;
+  color: #fff;
+}
+
+.pf-frame-list {
+  --pf-frame-gap: 6px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--pf-frame-gap);
+  /* Same size as the regular avatar preview (--pf-avatar-size), capped at 5
+     visible before horizontal scroll - grows to the right as frames are
+     added, up to that cap, rather than wrapping to a new row. */
+  max-width: calc(5 * var(--pf-avatar-size) + 4 * var(--pf-frame-gap));
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.pf-frame-item {
+  position: relative;
+  flex: none;
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: grab;
+}
+.pf-frame-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.pf-frame-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  border: none;
+  padding: 0;
+}
+.pf-frame-add {
+  flex: none;
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
+  border-radius: 12px;
+  background: rgba(109, 94, 252, 0.12);
+  border: 1.5px dashed #6d5efc;
+  color: #6d5efc;
+  font-size: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pf-fps-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.pf-fps-field input {
+  width: 48px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: inherit;
 }
 
 .chat-appearance-fields {

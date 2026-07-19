@@ -21,7 +21,9 @@ import { getSignedUrl as defaultGetSignedUrl } from '@aws-sdk/s3-request-presign
 
 export class AvatarValidationError extends Error {}
 
-export const ALLOWED_AVATAR_STATES = ['silent', 'speaking'];
+export const ALLOWED_AVATAR_STATES = ['silent', 'speaking-image', 'speaking-gif', 'speaking-frames'];
+export const SPEAKING_AVATAR_TYPES = ['image', 'gif', 'frames'];
+export const ALLOWED_STATIC_AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 export const ALLOWED_AVATAR_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5MB
 const UPLOAD_URL_TTL_SECONDS = 300; // 5 minutes
@@ -30,6 +32,14 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export function isValidHexColor(value) {
   return value === null || HEX_COLOR_RE.test(value);
+}
+
+// Silent and the Image speaking-type must stay static (no .gif) - only the
+// GIF and Frames speaking-types (Frames is always encoded to a .gif locally
+// before upload, see client/src/main/gifEncoder.js) may use the full
+// extension list.
+export function extensionsForState(state) {
+  return state === 'silent' || state === 'speaking-image' ? ALLOWED_STATIC_AVATAR_EXTENSIONS : ALLOWED_AVATAR_EXTENSIONS;
 }
 
 function manifestKey(userId) {
@@ -53,11 +63,11 @@ async function streamToString(body) {
 
 // Wraps S3 (via an injected client, so tests never make real AWS calls) with
 // the upload lifecycle (requestUploadUrl/confirmUpload), restart-recoverable
-// resolution (resolveAvatarUrls, Task 2), and clearing (clearAvatar, Task 3).
-// No discord.js dependency - kept swappable/testable in isolation, same
-// rationale as sessionRegistry.js.
+// resolution (resolveAvatarUrls), and clearing (clearAvatar). No discord.js
+// dependency - kept swappable/testable in isolation, same rationale as
+// sessionRegistry.js.
 export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUrl = defaultGetSignedUrl }) {
-  // userId -> { silentURL, speakingURL } | null (null = confirmed no custom avatar)
+  // userId -> { silentURL, speakingURL, usernameColor, chatColor } | null
   const registry = new Map();
 
   function urlFor(userId, manifest, state) {
@@ -66,10 +76,42 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return `${cdnBaseUrl}/${objectKey(userId, entry.version, state, entry.ext)}`;
   }
 
+  // manifest.speaking holds up to three independently-uploaded variants
+  // (image/gif/frames) plus which one is currently active - switching
+  // between them (setActiveSpeakingType, Task 2) never discards the others.
+  function speakingUrlFor(userId, manifest) {
+    const speaking = manifest?.speaking;
+    const activeType = speaking?.activeType;
+    const entry = activeType ? speaking[activeType] : null;
+    if (!entry) return null;
+    return `${cdnBaseUrl}/${objectKey(userId, entry.version, `speaking-${activeType}`, entry.ext)}`;
+  }
+
+  // Unlike speakingUrlFor (which only resolves the single active variant, for
+  // broadcasting to other viewers), this exposes all three variants plus
+  // which is active - needed by the avatar owner's own Settings UI to render
+  // three tabs. Additive-only: never consumed by the roster-broadcast path.
+  function speakingVariantsFor(userId, manifest) {
+    const speaking = manifest?.speaking;
+    const activeType = speaking?.activeType ?? null;
+    const variantURL = (type) => {
+      const entry = speaking?.[type];
+      if (!entry) return null;
+      return `${cdnBaseUrl}/${objectKey(userId, entry.version, `speaking-${type}`, entry.ext)}`;
+    };
+    return {
+      activeType,
+      image: variantURL('image'),
+      gif: variantURL('gif'),
+      frames: speaking?.frames ? { url: variantURL('frames'), fps: speaking.frames.fps, frameCount: speaking.frames.frameCount } : null,
+    };
+  }
+
   function urlsFromManifest(userId, manifest) {
     return {
       silentURL: urlFor(userId, manifest, 'silent'),
-      speakingURL: urlFor(userId, manifest, 'speaking'),
+      speakingURL: speakingUrlFor(userId, manifest),
+      speakingVariants: speakingVariantsFor(userId, manifest),
       usernameColor: manifest?.usernameColor ?? null,
       chatColor: manifest?.chatColor ?? null,
     };
@@ -100,7 +142,7 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
 
   async function requestUploadUrl(userId, state, ext) {
     if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
-    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
+    if (!extensionsForState(state).includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
     const version = crypto.randomBytes(8).toString('hex');
     const key = objectKey(userId, version, state, ext);
     const uploadUrl = await getSignedUrl(
@@ -111,9 +153,11 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return { uploadUrl, version };
   }
 
-  async function confirmUpload(userId, state, version, ext) {
+  // `extra.fps`/`extra.frameCount` are only read (and only meaningful) when
+  // `state === 'speaking-frames'` - ignored for every other state.
+  async function confirmUpload(userId, state, version, ext, extra = {}) {
     if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
-    if (!ALLOWED_AVATAR_EXTENSIONS.includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
+    if (!extensionsForState(state).includes(ext)) throw new AvatarValidationError(`Invalid avatar extension: ${ext}`);
     const key = objectKey(userId, version, state, ext);
 
     let head;
@@ -128,13 +172,24 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     }
 
     const manifest = (await readManifest(userId)) ?? {};
-    manifest[state] = { version, ext };
+    if (state === 'silent') {
+      manifest.silent = { version, ext };
+    } else {
+      const variant = state.slice('speaking-'.length); // 'image' | 'gif' | 'frames'
+      manifest.speaking = manifest.speaking ?? {};
+      manifest.speaking[variant] = {
+        version,
+        ext,
+        ...(variant === 'frames' ? { fps: extra.fps, frameCount: extra.frameCount } : {}),
+      };
+      manifest.speaking.activeType = variant;
+    }
     manifest.updatedAt = Date.now();
     await writeManifest(userId, manifest);
 
     const urls = urlsFromManifest(userId, manifest);
     registry.set(userId, urls);
-    return urls[`${state}URL`];
+    return state === 'silent' ? urls.silentURL : urls.speakingURL;
   }
 
   async function setProfileColors(userId, { usernameColor, chatColor }) {
@@ -168,10 +223,30 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     return urls;
   }
 
+  async function setActiveSpeakingType(userId, type) {
+    if (!SPEAKING_AVATAR_TYPES.includes(type)) throw new AvatarValidationError(`Invalid speaking avatar type: ${type}`);
+    const manifest = (await readManifest(userId)) ?? {};
+    if (!manifest.speaking?.[type]) throw new AvatarValidationError(`No ${type} speaking avatar uploaded yet`);
+    manifest.speaking.activeType = type;
+    manifest.updatedAt = Date.now();
+    await writeManifest(userId, manifest);
+
+    const urls = urlsFromManifest(userId, manifest);
+    registry.set(userId, urls);
+    return urls.speakingURL;
+  }
+
   async function clearAvatar(userId, state) {
     if (!ALLOWED_AVATAR_STATES.includes(state)) throw new AvatarValidationError(`Invalid avatar state: ${state}`);
     const manifest = (await readManifest(userId)) ?? {};
-    manifest[state] = null;
+    if (state === 'silent') {
+      manifest.silent = null;
+    } else {
+      const variant = state.slice('speaking-'.length);
+      manifest.speaking = manifest.speaking ?? {};
+      manifest.speaking[variant] = null;
+      if (manifest.speaking.activeType === variant) manifest.speaking.activeType = null;
+    }
     manifest.updatedAt = Date.now();
     await writeManifest(userId, manifest);
 
@@ -179,7 +254,7 @@ export function createAvatarRegistry({ s3Client, bucket, cdnBaseUrl, getSignedUr
     registry.set(userId, hasAnyProfileData(urls) ? urls : null);
   }
 
-  return { requestUploadUrl, confirmUpload, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar, setProfileColors };
+  return { requestUploadUrl, confirmUpload, setActiveSpeakingType, getCachedAvatarUrls, resolveAvatarUrls, clearAvatar, setProfileColors };
 }
 
 const { AWS_REGION, S3_AVATAR_BUCKET, AVATAR_CDN_BASE_URL } = process.env;

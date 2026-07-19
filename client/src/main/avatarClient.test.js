@@ -17,7 +17,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl, getBroadcastAvatarUrls, setPublicColors } from './avatarClient.js';
+import { AvatarUploadError, requestAvatarUploadUrl, confirmAvatarUpload, clearBroadcastAvatar, uploadFileToPresignedUrl, getBroadcastAvatarUrls, setPublicColors, setActiveSpeakingAvatarType } from './avatarClient.js';
 
 function startTestHttpServer(handler) {
   return new Promise((resolve) => {
@@ -104,8 +104,8 @@ test('clearBroadcastAvatar posts state and resolves on success', async () => {
       res.end('{}');
     });
   });
-  await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking' });
-  assert.deepEqual(receivedBody, { state: 'speaking' });
+  await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking-image' });
+  assert.deepEqual(receivedBody, { state: 'speaking-image' });
   server.close();
 });
 
@@ -191,5 +191,41 @@ test('uploadFileToPresignedUrl throws AvatarUploadError on a non-ok response', a
     () => uploadFileToPresignedUrl({ uploadUrl: `http://localhost:${port}/upload`, fileBuffer: Buffer.from('x'), contentType: 'image/png' }),
     AvatarUploadError,
   );
+  server.close();
+});
+
+test('confirmAvatarUpload includes fps and frameCount in the request body when provided', async () => {
+  let receivedBody = null;
+  const { server, port } = await startTestHttpServer((req, res) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => {
+      receivedBody = JSON.parse(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ avatarUrl: 'https://cdn/x.gif' }));
+    });
+  });
+  await confirmAvatarUpload({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking-frames', version: 'v1', ext: 'gif', fps: 6, frameCount: 12 });
+  assert.deepEqual(receivedBody, { state: 'speaking-frames', version: 'v1', ext: 'gif', fps: 6, frameCount: 12 });
+  server.close();
+});
+
+test('setActiveSpeakingAvatarType posts to /api/avatar/speaking-type and returns the parsed response', async () => {
+  let receivedBody = null;
+  let receivedPath = null;
+  const { server, port } = await startTestHttpServer((req, res) => {
+    receivedPath = req.url;
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => {
+      receivedBody = JSON.parse(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ speakingURL: 'https://cdn/x.png' }));
+    });
+  });
+  const result = await setActiveSpeakingAvatarType({ serverAddress: `localhost:${port}`, token: 'tok', type: 'image' });
+  assert.equal(receivedPath, '/api/avatar/speaking-type');
+  assert.deepEqual(receivedBody, { type: 'image' });
+  assert.deepEqual(result, { speakingURL: 'https://cdn/x.png' });
   server.close();
 });

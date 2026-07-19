@@ -15,13 +15,24 @@
  */
 
 import AvatarField from './AvatarField';
+import SpeakingAvatarField from './SpeakingAvatarField';
 import ColorField from './ColorField';
 
-// One editor, three call sites (Your Profile card, each Default Slot row, each
-// Friend card). Avatar fields come from AvatarField, color fields from
-// ColorField.
+// One editor, two call sites (each Default Slot row, each Friend card).
+// Silent uses AvatarField directly; Speaking uses SpeakingAvatarField (the
+// Image/GIF/Frames tab bar).
 
-export default function ProfileFieldsEditor({ layout, profile, onPickAvatar, onClearAvatar, onSetColor, onClearColor }) {
+export default function ProfileFieldsEditor({
+  layout,
+  profile,
+  onPickAvatar,
+  onClearAvatar,
+  onPickFrames,
+  onSaveFrames,
+  onSetSpeakingType,
+  onSetColor,
+  onClearColor,
+}) {
   return (
     <div className={`profile-fields profile-fields--${layout}`}>
       <div className="pf-avatars">
@@ -30,12 +41,18 @@ export default function ProfileFieldsEditor({ layout, profile, onPickAvatar, onC
           src={profile.avatarSilent}
           onPick={() => onPickAvatar('silent')}
           onClear={() => onClearAvatar('silent')}
+          alignWithTabs
         />
-        <AvatarField
-          label="Speaking"
-          src={profile.avatarSpeaking}
-          onPick={() => onPickAvatar('speaking')}
-          onClear={() => onClearAvatar('speaking')}
+        <SpeakingAvatarField
+          variants={profile.speakingVariants}
+          onPickImage={() => onPickAvatar('speaking-image')}
+          onPickGif={() => onPickAvatar('speaking-gif')}
+          onPickFrames={onPickFrames}
+          onSaveFrames={onSaveFrames}
+          onSetActiveType={onSetSpeakingType}
+          onClearImage={() => onClearAvatar('speaking-image')}
+          onClearGif={() => onClearAvatar('speaking-gif')}
+          onClearFrames={() => onClearAvatar('speaking-frames')}
         />
       </div>
       <div className="pf-colors">

@@ -20,7 +20,7 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { handleAuthLogin, handleAuthCallback, handleAuthExchange, handleAuthIcon, verifySessionToken, readJsonBody } from './auth.js';
 import { getLiveSessionForUser, getUserProfile, rebroadcastRosterIfLive } from './bot.js';
 import { getSession } from './sessionRegistry.js';
-import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
+import { avatarRegistry, ALLOWED_AVATAR_STATES, ALLOWED_AVATAR_EXTENSIONS, SPEAKING_AVATAR_TYPES, extensionsForState, AvatarValidationError, isValidHexColor } from './avatarRegistry.js';
 
 const { PORT } = process.env;
 export const PORT_NUMBER = PORT || 3000;
@@ -35,6 +35,7 @@ export const httpServer = http.createServer((req, res) => {
   if (url.pathname === '/api/avatar/upload-url') return handleAvatarUploadUrl(req, res);
   if (url.pathname === '/api/avatar/confirm') return handleAvatarConfirm(req, res);
   if (url.pathname === '/api/avatar/clear') return handleAvatarClear(req, res);
+  if (url.pathname === '/api/avatar/speaking-type') return handleAvatarSpeakingType(req, res);
   if (url.pathname === '/api/avatar/colors') return handleAvatarColors(req, res);
   if (url.pathname === '/api/avatar/me') return handleAvatarMe(req, res);
   res.writeHead(404, { 'Content-Type': 'text/plain' });
@@ -153,7 +154,7 @@ export function createAvatarUploadUrlHandler({ verifyToken, requestUploadUrl }) 
       res.end(JSON.stringify({ error: 'invalid body' }));
       return;
     }
-    if (!ALLOWED_AVATAR_STATES.includes(body.state) || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || !extensionsForState(body.state).includes(body.ext)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid state or ext' }));
       return;
@@ -186,13 +187,13 @@ export function createAvatarConfirmHandler({ verifyToken, confirmUpload, onAvata
       res.end(JSON.stringify({ error: 'invalid body' }));
       return;
     }
-    if (!ALLOWED_AVATAR_STATES.includes(body.state) || typeof body.version !== 'string' || !ALLOWED_AVATAR_EXTENSIONS.includes(body.ext)) {
+    if (!ALLOWED_AVATAR_STATES.includes(body.state) || typeof body.version !== 'string' || !extensionsForState(body.state).includes(body.ext)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'invalid state, version, or ext' }));
       return;
     }
     try {
-      const avatarUrl = await confirmUpload(userId, body.state, body.version, body.ext);
+      const avatarUrl = await confirmUpload(userId, body.state, body.version, body.ext, { fps: body.fps, frameCount: body.frameCount });
       onAvatarChanged?.(userId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ avatarUrl }));
@@ -234,6 +235,45 @@ export function createAvatarClearHandler({ verifyToken, clearAvatar, onAvatarCha
     onAvatarChanged?.(userId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({}));
+  };
+}
+
+export function createAvatarSpeakingTypeHandler({ verifyToken, setActiveSpeakingType, onAvatarChanged }) {
+  return async function handleAvatarSpeakingType(req, res) {
+    const userId = requireBearerUserId(req, verifyToken);
+    if (!userId) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid body' }));
+      return;
+    }
+    if (!SPEAKING_AVATAR_TYPES.includes(body.type)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'invalid type' }));
+      return;
+    }
+    try {
+      const speakingURL = await setActiveSpeakingType(userId, body.type);
+      onAvatarChanged?.(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ speakingURL }));
+    } catch (err) {
+      if (err instanceof AvatarValidationError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+        return;
+      }
+      console.error('Failed to set active speaking avatar type:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'failed to set active speaking avatar type' }));
+    }
   };
 }
 
@@ -286,7 +326,11 @@ export function createAvatarMeHandler({ verifyToken, resolveAvatarUrls }) {
     }
     const urls = await resolveAvatarUrls(userId);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ silentURL: urls?.silentURL ?? null, speakingURL: urls?.speakingURL ?? null }));
+    res.end(JSON.stringify({
+      silentURL: urls?.silentURL ?? null,
+      speakingURL: urls?.speakingURL ?? null,
+      speakingVariants: urls?.speakingVariants ?? { activeType: null, image: null, gif: null, frames: null },
+    }));
   };
 }
 
@@ -294,6 +338,7 @@ const handleMe = createMeHandler({ verifyToken: verifySessionToken, getProfile: 
 const handleAvatarUploadUrl = createAvatarUploadUrlHandler({ verifyToken: verifySessionToken, requestUploadUrl: avatarRegistry.requestUploadUrl });
 const handleAvatarConfirm = createAvatarConfirmHandler({ verifyToken: verifySessionToken, confirmUpload: avatarRegistry.confirmUpload, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarClear = createAvatarClearHandler({ verifyToken: verifySessionToken, clearAvatar: avatarRegistry.clearAvatar, onAvatarChanged: rebroadcastRosterIfLive });
+const handleAvatarSpeakingType = createAvatarSpeakingTypeHandler({ verifyToken: verifySessionToken, setActiveSpeakingType: avatarRegistry.setActiveSpeakingType, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarColors = createAvatarColorsHandler({ verifyToken: verifySessionToken, setProfileColors: avatarRegistry.setProfileColors, onAvatarChanged: rebroadcastRosterIfLive });
 const handleAvatarMe = createAvatarMeHandler({ verifyToken: verifySessionToken, resolveAvatarUrls: avatarRegistry.resolveAvatarUrls });
 

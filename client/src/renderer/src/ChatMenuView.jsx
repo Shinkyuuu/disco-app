@@ -213,6 +213,7 @@ export default function ChatMenuView({ params }) {
                     className={
                       settings.chatAutoWidth ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
                     }
+                    disabled={settings.chatLocked}
                     onSelect={() => changeSetting({ chatAutoWidth: !settings.chatAutoWidth })}
                   >
                     {settings.chatAutoWidth ? 'Disable auto width' : 'Enable auto width'}
@@ -223,6 +224,7 @@ export default function ChatMenuView({ params }) {
                     className={
                       settings.chatSnapToEdge ? 'window-menu-item window-menu-item--on' : 'window-menu-item'
                     }
+                    disabled={settings.chatLocked}
                     onSelect={() => changeSetting({ chatSnapToEdge: !settings.chatSnapToEdge })}
                   >
                     {settings.chatSnapToEdge ? 'Disable snap to edge' : 'Enable snap to edge'}

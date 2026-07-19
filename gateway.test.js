@@ -18,7 +18,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarMeHandler, createAvatarColorsHandler, sweepHeartbeats, createHeartbeat } from './gateway.js';
+import { createAuthGate, createMeHandler, createBroadcaster, createSessionEndedNotifier, createAvatarUploadUrlHandler, createAvatarConfirmHandler, createAvatarClearHandler, createAvatarSpeakingTypeHandler, createAvatarMeHandler, createAvatarColorsHandler, sweepHeartbeats, createHeartbeat } from './gateway.js';
 import { AvatarValidationError } from './avatarRegistry.js';
 
 function startTestServer(gateOptions) {
@@ -291,10 +291,10 @@ test('POST /api/avatar/clear returns 200 on success and notifies onAvatarChanged
   const res = await fetch(`http://localhost:${port}/api/avatar/clear`, {
     method: 'POST',
     headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ state: 'speaking' }),
+    body: JSON.stringify({ state: 'speaking-gif' }),
   });
   assert.equal(res.status, 200);
-  assert.deepEqual(cleared, [['user-1', 'speaking']]);
+  assert.deepEqual(cleared, [['user-1', 'speaking-gif']]);
   assert.deepEqual(changed, ['user-1']);
   server.close();
 });
@@ -316,6 +316,67 @@ test('POST /api/avatar/clear returns 401 without a valid token, and does not not
   server.close();
 });
 
+test('POST /api/avatar/speaking-type returns 200 with the resolved speakingURL and notifies onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarSpeakingTypeHandler({
+    verifyToken: () => 'user-1',
+    setActiveSpeakingType: async (userId, type) => `https://cdn/${userId}/${type}.gif`,
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/speaking-type`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'gif' }),
+  });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.speakingURL, 'https://cdn/user-1/gif.gif');
+  assert.deepEqual(changed, ['user-1']);
+  server.close();
+});
+
+test('POST /api/avatar/speaking-type returns 400 for an invalid type', async () => {
+  const handler = createAvatarSpeakingTypeHandler({ verifyToken: () => 'user-1', setActiveSpeakingType: async () => {} });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/speaking-type`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'bogus' }),
+  });
+  assert.equal(res.status, 400);
+  server.close();
+});
+
+test('POST /api/avatar/speaking-type returns 400 when setActiveSpeakingType rejects with a validation error, and does not notify onAvatarChanged', async () => {
+  const changed = [];
+  const handler = createAvatarSpeakingTypeHandler({
+    verifyToken: () => 'user-1',
+    setActiveSpeakingType: async () => { throw new AvatarValidationError('No frames speaking avatar uploaded yet'); },
+    onAvatarChanged: (userId) => changed.push(userId),
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/speaking-type`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'frames' }),
+  });
+  assert.equal(res.status, 400);
+  assert.deepEqual(changed, []);
+  server.close();
+});
+
+test('POST /api/avatar/speaking-type returns 401 without a valid token', async () => {
+  const handler = createAvatarSpeakingTypeHandler({ verifyToken: () => null, setActiveSpeakingType: async () => {} });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/speaking-type`, {
+    method: 'POST',
+    body: JSON.stringify({ type: 'gif' }),
+  });
+  assert.equal(res.status, 401);
+  server.close();
+});
+
 test('GET /api/avatar/me returns 200 with silentURL/speakingURL for a valid token', async () => {
   const handler = createAvatarMeHandler({
     verifyToken: (token) => (token === 'good-token' ? 'user-1' : null),
@@ -326,7 +387,40 @@ test('GET /api/avatar/me returns 200 with silentURL/speakingURL for a valid toke
   const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer good-token' } });
   const body = await res.json();
   assert.equal(res.status, 200);
-  assert.deepEqual(body, { silentURL: 'https://cdn/silent.png', speakingURL: 'https://cdn/speaking.png' });
+  assert.deepEqual(body, {
+    silentURL: 'https://cdn/silent.png',
+    speakingURL: 'https://cdn/speaking.png',
+    speakingVariants: { activeType: null, image: null, gif: null, frames: null },
+  });
+  server.close();
+});
+
+test('GET /api/avatar/me returns 200 with speakingVariants for a valid token', async () => {
+  const handler = createAvatarMeHandler({
+    verifyToken: () => 'user-1',
+    resolveAvatarUrls: async (userId) =>
+      userId === 'user-1'
+        ? {
+            silentURL: 'https://cdn/silent.png',
+            speakingURL: 'https://cdn/speaking-frames.gif',
+            speakingVariants: { activeType: 'frames', image: null, gif: null, frames: { url: 'https://cdn/speaking-frames.gif', fps: 6, frameCount: 12 } },
+          }
+        : null,
+  });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer good-token' } });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.deepEqual(body.speakingVariants, { activeType: 'frames', image: null, gif: null, frames: { url: 'https://cdn/speaking-frames.gif', fps: 6, frameCount: 12 } });
+  server.close();
+});
+
+test('GET /api/avatar/me returns an all-null speakingVariants when no avatar has been set', async () => {
+  const handler = createAvatarMeHandler({ verifyToken: () => 'user-1', resolveAvatarUrls: async () => null });
+  const { server, port } = await startTestHttpServer(handler);
+  const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer tok' } });
+  const body = await res.json();
+  assert.deepEqual(body.speakingVariants, { activeType: null, image: null, gif: null, frames: null });
   server.close();
 });
 
@@ -336,7 +430,11 @@ test('GET /api/avatar/me returns 200 with nulls when no avatar has been set', as
   const res = await fetch(`http://localhost:${port}/api/avatar/me`, { headers: { Authorization: 'Bearer tok' } });
   const body = await res.json();
   assert.equal(res.status, 200);
-  assert.deepEqual(body, { silentURL: null, speakingURL: null });
+  assert.deepEqual(body, {
+    silentURL: null,
+    speakingURL: null,
+    speakingVariants: { activeType: null, image: null, gif: null, frames: null },
+  });
   server.close();
 });
 

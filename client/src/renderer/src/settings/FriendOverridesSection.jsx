@@ -65,6 +65,9 @@ export default function FriendOverridesSection({ friends, onChange }) {
                 profile={profile}
                 onPickAvatar={(kind) => update(() => window.api.pickFriendAvatarImage(userId, kind))}
                 onClearAvatar={(kind) => update(() => window.api.clearFriendAvatarImage(userId, kind))}
+                onPickFrames={window.api.pickFrameSourceImages}
+                onSaveFrames={(frameFilePaths, fps) => update(() => window.api.saveFriendFramesAvatar(userId, frameFilePaths, fps))}
+                onSetSpeakingType={(type) => update(() => window.api.setFriendAvatarType(userId, type))}
                 onSetColor={(field, value) =>
                   update(() => window.api.setFriendProfileColors(userId, { ...colorsOf(profile), [field]: value }))
                 }
