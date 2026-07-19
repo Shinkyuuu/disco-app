@@ -80,15 +80,21 @@ async function tmpSolidColorPng(width, height, rgba) {
 
 // Scans raw GIF bytes for Graphic Control Extension blocks (`21 F9 04 ...`)
 // - one is written per frame by gifenc - and returns each block's stored
-// delay in centiseconds (GIF's native unit), so tests can check both frame
-// count and per-frame timing without a GIF decoder dependency. Block layout:
-// 21 F9 04 <flags:1> <delay:2 LE> <transparent index:1> 00.
+// delay (centiseconds, GIF's native unit) and transparency info, so tests
+// can check frame count/timing/transparency without a GIF decoder
+// dependency. Block layout: 21 F9 04 <packed:1> <delay:2 LE>
+// <transparent index:1> 00. Packed's bit 0 is the Transparent Color Flag
+// (GIF89a spec) - when set, <transparent index> names the palette index
+// treated as see-through for this frame.
 function readGraphicControlExtensions(gifBytes) {
   const blocks = [];
   for (let i = 0; i < gifBytes.length - 7; i++) {
     if (gifBytes[i] === 0x21 && gifBytes[i + 1] === 0xf9 && gifBytes[i + 2] === 0x04) {
+      const packed = gifBytes[i + 3];
       const delayCentiseconds = gifBytes[i + 4] | (gifBytes[i + 5] << 8);
-      blocks.push({ delayCentiseconds });
+      const transparentColorFlag = Boolean(packed & 0x01);
+      const transparentIndex = gifBytes[i + 6];
+      blocks.push({ delayCentiseconds, transparentColorFlag, transparentIndex });
     }
   }
   return blocks;
@@ -106,6 +112,20 @@ test('encodeFramesToGif produces a valid GIF89a with one frame per source image'
   assert.equal(gifBytes.subarray(0, 6).toString('ascii'), 'GIF89a');
   const blocks = readGraphicControlExtensions(gifBytes);
   assert.equal(blocks.length, 3);
+});
+
+test("encodeFramesToGif marks a fully-transparent frame's color as transparent, instead of baking it in as opaque black", async () => {
+  const frames = await Promise.all([
+    tmpSolidColorPng(2, 2, 0x00000000), // fully transparent
+    tmpSolidColorPng(2, 2, 0xff0000ff), // fully opaque red - should NOT be marked transparent
+  ]);
+
+  const gifBytes = await encodeFramesToGif(frames, 6);
+
+  const blocks = readGraphicControlExtensions(gifBytes);
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].transparentColorFlag, true);
+  assert.equal(blocks[1].transparentColorFlag, false);
 });
 
 test('encodeFramesToGif stores the delay implied by fps, in GIF centiseconds', async () => {

@@ -77,9 +77,21 @@ export async function encodeFramesToGif(frameFilePaths, fps) {
     // pooled memory as pixel data. Copying into a fresh, exactly-sized
     // Uint8Array (byteOffset 0) avoids that.
     const data = new Uint8Array(image.bitmap.data);
-    const palette = quantize(data, 256);
-    const index = applyPalette(data, palette);
-    gif.writeFrame(index, width, height, { palette, delay });
+    // Quantizing with the default 'rgb565' format drops the alpha channel
+    // entirely - every transparent source pixel would quantize into an
+    // opaque color (clearAlphaColor, black by default) with no palette
+    // entry ever marked transparent, baking a solid black background into
+    // frames that were meant to be see-through. 'rgba4444' keeps alpha as
+    // part of each palette color; oneBitAlpha snaps it to fully
+    // transparent/opaque, matching GIF's actual 1-bit transparency support.
+    const palette = quantize(data, 256, { format: 'rgba4444', oneBitAlpha: true });
+    const index = applyPalette(data, palette, 'rgba4444');
+    const transparentIndex = palette.findIndex((color) => color[3] === 0);
+    gif.writeFrame(index, width, height, {
+      palette,
+      delay,
+      ...(transparentIndex !== -1 ? { transparent: true, transparentIndex } : {}),
+    });
   }
   gif.finish();
   return Buffer.from(gif.bytes());
