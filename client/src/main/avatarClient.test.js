@@ -104,8 +104,8 @@ test('clearBroadcastAvatar posts state and resolves on success', async () => {
       res.end('{}');
     });
   });
-  await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking' });
-  assert.deepEqual(receivedBody, { state: 'speaking' });
+  await clearBroadcastAvatar({ serverAddress: `localhost:${port}`, token: 'tok', state: 'speaking-image' });
+  assert.deepEqual(receivedBody, { state: 'speaking-image' });
   server.close();
 });
 

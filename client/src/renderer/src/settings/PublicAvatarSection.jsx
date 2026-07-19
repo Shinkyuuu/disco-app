@@ -31,7 +31,12 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
   const [silentURL, setSilentURL] = useState(null);
   const [speakingVariants, setSpeakingVariants] = useState(EMPTY_VARIANTS);
   const [error, setError] = useState(null);
-  const [pending, setPending] = useState(null); // 'silent' | 'image' | 'gif' | 'frames' | null
+  // Silent and Speaking are independent fields with their own upload/clear/
+  // switch flows - separate pending trackers so an in-flight Speaking
+  // operation isn't un-busied (or vice versa) by an unrelated Silent
+  // operation's `finally` clearing a shared slot.
+  const [pendingSilent, setPendingSilent] = useState(false);
+  const [pendingSpeaking, setPendingSpeaking] = useState(null); // 'image' | 'gif' | 'frames' | null
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -60,7 +65,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
   }
 
   async function handlePickSilent() {
-    setPending('silent');
+    setPendingSilent(true);
     setError(null);
     try {
       const avatarUrl = await window.api.uploadBroadcastAvatar('silent');
@@ -68,12 +73,12 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
     } catch (err) {
       setError(`Failed to upload silent avatar: ${err.message}`);
     } finally {
-      setPending(null);
+      setPendingSilent(false);
     }
   }
 
   async function handleClearSilent() {
-    setPending('silent');
+    setPendingSilent(true);
     setError(null);
     try {
       await window.api.clearBroadcastAvatar('silent');
@@ -81,12 +86,12 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
     } catch (err) {
       setError(`Failed to clear silent avatar: ${err.message}`);
     } finally {
-      setPending(null);
+      setPendingSilent(false);
     }
   }
 
   async function handlePickSpeaking(variantKind, type) {
-    setPending(type);
+    setPendingSpeaking(type);
     setError(null);
     try {
       const avatarUrl = await window.api.uploadBroadcastAvatar(variantKind);
@@ -94,12 +99,12 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
     } catch (err) {
       setError(`Failed to upload speaking ${type}: ${err.message}`);
     } finally {
-      setPending(null);
+      setPendingSpeaking(null);
     }
   }
 
   async function handleSaveFrames(frameFilePaths, fps) {
-    setPending('frames');
+    setPendingSpeaking('frames');
     setError(null);
     try {
       const avatarUrl = await window.api.uploadBroadcastFramesAvatar(frameFilePaths, fps);
@@ -108,7 +113,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
       setError(`Failed to upload frames: ${err.message}`);
       throw err;
     } finally {
-      setPending(null);
+      setPendingSpeaking(null);
     }
   }
 
@@ -116,7 +121,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
   // so SpeakingAvatarField's selectTab can revert the optimistically-switched
   // tab back to the real active type - see Task 2's selectTab.
   async function handleSetActiveType(type) {
-    setPending(type);
+    setPendingSpeaking(type);
     setError(null);
     try {
       await window.api.setBroadcastSpeakingType(type);
@@ -125,12 +130,12 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
       setError(`Failed to switch speaking avatar: ${err.message}`);
       throw err;
     } finally {
-      setPending(null);
+      setPendingSpeaking(null);
     }
   }
 
   async function handleClearSpeaking(type) {
-    setPending(type);
+    setPendingSpeaking(type);
     setError(null);
     try {
       await window.api.clearBroadcastAvatar(`speaking-${type}`);
@@ -138,7 +143,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
     } catch (err) {
       setError(`Failed to clear speaking ${type}: ${err.message}`);
     } finally {
-      setPending(null);
+      setPendingSpeaking(null);
     }
   }
 
@@ -166,14 +171,14 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
             <AvatarField
               label="Silent"
               src={silentURL}
-              busy={pending === 'silent'}
+              busy={pendingSilent}
               onPick={handlePickSilent}
               onClear={handleClearSilent}
             />
             <SpeakingAvatarField
               key={loaded ? 'loaded' : 'loading'}
               variants={speakingVariants}
-              busy={Boolean(pending)}
+              busy={Boolean(pendingSpeaking)}
               onPickImage={() => handlePickSpeaking('speaking-image', 'image')}
               onPickGif={() => handlePickSpeaking('speaking-gif', 'gif')}
               onPickFrames={window.api.pickFrameSourceImages}

@@ -29,6 +29,7 @@ export class GifEncodingError extends Error {}
 export const MIN_FRAMES = 2;
 export const MAX_FRAMES = 30;
 export const MAX_FRAME_BYTES = 2 * 1024 * 1024; // 2MB
+export const MAX_FRAME_DIMENSION = 2048; // decoded px, per side
 export const MIN_FPS = 1;
 export const MAX_FPS = 30;
 
@@ -57,6 +58,20 @@ export async function encodeFramesToGif(frameFilePaths, fps) {
   validateFrameInputs(frameFilePaths, fps);
 
   const images = await Promise.all(frameFilePaths.map((filePath) => Jimp.read(filePath)));
+
+  // MAX_FRAME_BYTES only bounds each frame's encoded (on-disk) size - a small,
+  // highly-compressible file can still decode into a huge pixel buffer (a
+  // classic decompression-bomb shape). Reject oversized decoded dimensions
+  // here, before the resize/quantize loop below does real work on them.
+  for (let i = 0; i < images.length; i++) {
+    const { width: w, height: h } = images[i].bitmap;
+    if (w > MAX_FRAME_DIMENSION || h > MAX_FRAME_DIMENSION) {
+      throw new GifEncodingError(
+        `Frame ${frameFilePaths[i]} decodes to ${w}x${h}px, exceeding the ${MAX_FRAME_DIMENSION}px-per-side limit`,
+      );
+    }
+  }
+
   const { width, height } = images[0].bitmap;
 
   const gif = GIFEncoder();
