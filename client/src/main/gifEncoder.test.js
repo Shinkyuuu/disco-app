@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_BYTES, MIN_FPS, MAX_FPS, validateFrameInputs, encodeFramesToGif } from './gifEncoder.js';
+import { GifEncodingError, MIN_FRAMES, MAX_FRAMES, MAX_FRAME_BYTES, MAX_FRAME_DIMENSION, MIN_FPS, MAX_FPS, validateFrameInputs, encodeFramesToGif } from './gifEncoder.js';
 import { Jimp } from 'jimp';
 
 function tmpFileOfSize(bytes) {
@@ -135,4 +135,19 @@ test('encodeFramesToGif stores the delay implied by fps, in GIF centiseconds', a
 
 test('encodeFramesToGif rejects invalid inputs before doing any decoding work', async () => {
   await assert.rejects(() => encodeFramesToGif([tmpFileOfSize(100)], 6), GifEncodingError);
+});
+
+// MAX_FRAME_BYTES only bounds each frame's encoded (on-disk) size - a small,
+// highly-compressible file can still decode into a huge pixel buffer. Uses a
+// tall-and-thin (not square) shape to exceed MAX_FRAME_DIMENSION on one side
+// while keeping the actual decoded pixel count - and this test's real
+// runtime cost - small.
+test('encodeFramesToGif rejects a frame whose decoded dimensions exceed MAX_FRAME_DIMENSION', async () => {
+  const frames = await Promise.all([tmpSolidColorPng(MAX_FRAME_DIMENSION + 1, 2, 0xff0000ff), tmpSolidColorPng(4, 4, 0x00ff00ff)]);
+
+  await assert.rejects(() => encodeFramesToGif(frames, 6), (err) => {
+    assert.ok(err instanceof GifEncodingError);
+    assert.match(err.message, /exceeding the \d+px-per-side limit/);
+    return true;
+  });
 });
