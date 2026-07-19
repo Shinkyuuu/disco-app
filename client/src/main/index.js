@@ -15,7 +15,7 @@
  */
 
 import 'dotenv/config';
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, shell, Tray } from 'electron';
 import pkg from 'electron-updater';
 const { autoUpdater } = pkg;
 import path from 'node:path';
@@ -101,6 +101,7 @@ const SERVER_ADDRESS = process.env.SERVER_ADDRESS || 'disco.schemainit.com';
 let updaterWindow = null;
 let launcherWindow = null;
 let chatWindow = null;
+let chatTray = null;
 // The ⋯ menu's dropdown - a separate always-on-top popup rather than content
 // inside chatWindow, so opening it never has to resize or move the chat
 // window itself (see createChatMenuWindow below).
@@ -489,6 +490,7 @@ function createChatWindow() {
     transparent: true,
     resizable: true,
     movable: !locked,
+    skipTaskbar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.cjs'),
       contextIsolation: true,
@@ -535,12 +537,34 @@ function createChatWindow() {
   });
   if (store.get('chatSnapToEdge')) snapWindowToNearestEdge(chatWindow);
   chatWindow.loadURL(rendererUrl('chat'));
+  createChatTray();
   chatWindow.on('closed', () => {
     chatWindow = null;
+    chatTray?.destroy();
+    chatTray = null;
     chatMenuWindow?.close();
     if (launcherWindow) launcherWindow.show();
   });
   if (launcherWindow) launcherWindow.hide();
+}
+
+// Paired 1:1 with chatWindow's lifecycle (created here, destroyed in its
+// 'closed' handler) so the tray icon is the only visible affordance for the
+// chat-window once skipTaskbar removes its taskbar button.
+function createChatTray() {
+  chatTray = new Tray(ICON_PATH);
+  chatTray.setToolTip('Disco Chat');
+  const focusChatWindow = () => {
+    chatWindow?.show();
+    chatWindow?.focus();
+  };
+  chatTray.on('click', focusChatWindow);
+  chatTray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Show Chat', click: focusChatWindow },
+      { label: 'Close Chat', click: () => chatWindow?.close() },
+    ]),
+  );
 }
 
 // The ⋯ menu's dropdown, as its own small always-on-top popup rather than
