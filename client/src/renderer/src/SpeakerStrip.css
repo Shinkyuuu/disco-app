@@ -111,8 +111,8 @@
    speaking-glow's bleed (scale/translateY/blur) - so neither ever clips
    against the top of the window. */
 .speaker-icon--discord {
-  width: 54px;
-  height: 54px;
+  width: 67px;
+  height: 67px;
   border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
   margin-bottom: 14px; /* floats just above the chat panel's top edge */
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
@@ -121,7 +121,7 @@
 .speaker-icon--discord.speaker-icon--medium {
   width: 73px;
   height: 73px;
-  margin-bottom: 19px;
+  margin-bottom: 14px;
 }
 
 .speaker-icon--discord.speaker-icon--large {
@@ -137,16 +137,16 @@
 }
 
 .speaker-icon--custom {
-  width: 96px; /* box is a portrait rectangle (0.8x height), not square */
-  height: 120px;
+  width: 75px; /* box is a portrait rectangle (0.8x height), not square */
+  height: 94px;
   border-radius: 0; /* character art, not a round avatar - don't clip it */
   margin-bottom: -11px; /* bottom overlaps behind the chat panel (higher z-index) - "peeking out" */
 }
 
 .speaker-icon--custom.speaker-icon--medium {
-  width: 98px;
-  height: 123px;
-  margin-bottom: -18px;
+  width: 96px;
+  height: 120px;
+  margin-bottom: -11px;
 }
 
 .speaker-icon--custom.speaker-icon--large {

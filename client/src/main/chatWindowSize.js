@@ -44,7 +44,7 @@ export function chatWindowHeightFor(avatarSize, { collapsed = false, panelHeight
 export { headerHeightFor };
 
 // Avatar box widths per avatar size - keep in sync with .speaker-icon--discord
-// / .speaker-icon--custom in SpeakerStrip.css. Custom-mode portraits arex 
+// / .speaker-icon--custom in SpeakerStrip.css. Custom-mode portraits are 
 // wider rectangles than the round discord avatars, hence the separate table
 // (same distinction as HEADER_HEIGHT_BY_AVATAR_SIZE / _DISCORD above).
 export const AVATAR_WIDTH_BY_SIZE = { small: 75, medium: 96, large: 146, xlarge: 194 };

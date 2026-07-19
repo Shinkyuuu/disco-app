@@ -730,7 +730,7 @@ input {
 }
 
 .chat-header--small { 
-  height: 138px;
+  height: 118px;
 }
 
 .chat-header--medium {
@@ -749,7 +749,7 @@ input {
    custom-image portraits do, so they need much less top headroom - keep in
    sync with HEADER_HEIGHT_BY_AVATAR_SIZE_DISCORD in chatWindowSize.js. */
 .chat-header--discord.chat-header--small {
-  height: 104px;
+  height: 114px;
 }
 
 .chat-header--discord.chat-header--medium {
@@ -826,7 +826,7 @@ input {
 }
 
 .message-line-avatar--small {
-  height: 21x;
+  height: 21px;
 }
 
 .message-line-avatar--medium {
