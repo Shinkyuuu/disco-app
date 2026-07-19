@@ -67,9 +67,13 @@ export default function MessageLog({ entries, colorBySpeaker = {}, chatSize = 'm
     stickToBottomRef.current = isNearBottom(containerRef.current, STICK_TO_BOTTOM_THRESHOLD_PX);
   };
 
+  // Instant, not { behavior: 'smooth' }: an animated scroll fires 'scroll'
+  // events mid-glide, which handleScroll reads as the user scrolling away
+  // from the bottom - on a fast-arriving entry it latches
+  // stickToBottomRef.current to false and auto-scroll never recovers.
   useEffect(() => {
     if (stickToBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      bottomRef.current?.scrollIntoView();
     }
   }, [entries]);
 
