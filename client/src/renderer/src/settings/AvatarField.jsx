@@ -18,9 +18,22 @@
 // cards / Default Slots) and PublicAvatarSection: thumbnail (or dashed "+"
 // placeholder) with Change/Add and Clear buttons. `busy` dims the thumbnail
 // and disables both buttons while an upload/clear request is in flight.
-export default function AvatarField({ label, src, onPick, onClear, busy = false }) {
+// `alignWithTabs` reserves the same vertical space SpeakingAvatarField's tab
+// bar occupies above its own thumbnail (an invisible, identically-marked-up
+// tab bar rather than a hardcoded pixel offset, so it stays correct even if
+// the tab bar's own padding/font-size changes later) - used only for the
+// Silent field, which sits beside a tabbed Speaking field with nothing of
+// its own above the thumbnail.
+export default function AvatarField({ label, src, onPick, onClear, busy = false, alignWithTabs = false }) {
   return (
     <div className="pf-field">
+      {alignWithTabs && (
+        <div className="pf-type-tabs pf-type-tabs--spacer" aria-hidden="true">
+          <button type="button" className="pf-type-tab" tabIndex={-1}>
+            Image
+          </button>
+        </div>
+      )}
       <span className="pf-label">{label}</span>
       <div className="pf-avatar-wrap">
         {src ? (

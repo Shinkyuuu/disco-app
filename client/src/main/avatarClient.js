@@ -49,14 +49,19 @@ export async function requestAvatarUploadUrl({ serverAddress, token, state, ext,
   return postJson(`${scheme}://${serverAddress}/api/avatar/upload-url`, { token, body: { state, ext }, timeoutMs });
 }
 
-export async function confirmAvatarUpload({ serverAddress, token, state, version, ext, timeoutMs = 5000 }) {
+export async function confirmAvatarUpload({ serverAddress, token, state, version, ext, fps, frameCount, timeoutMs = 5000 }) {
   const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
-  return postJson(`${scheme}://${serverAddress}/api/avatar/confirm`, { token, body: { state, version, ext }, timeoutMs });
+  return postJson(`${scheme}://${serverAddress}/api/avatar/confirm`, { token, body: { state, version, ext, fps, frameCount }, timeoutMs });
 }
 
 export async function clearBroadcastAvatar({ serverAddress, token, state, timeoutMs = 5000 }) {
   const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
   await postJson(`${scheme}://${serverAddress}/api/avatar/clear`, { token, body: { state }, timeoutMs });
+}
+
+export async function setActiveSpeakingAvatarType({ serverAddress, token, type, timeoutMs = 5000 }) {
+  const scheme = schemeFor(serverAddress, { secure: 'https', insecure: 'http' });
+  return postJson(`${scheme}://${serverAddress}/api/avatar/speaking-type`, { token, body: { type }, timeoutMs });
 }
 
 export async function getBroadcastAvatarUrls({ serverAddress, token, timeoutMs = 5000 }) {
