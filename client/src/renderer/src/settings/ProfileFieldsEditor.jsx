@@ -41,6 +41,7 @@ export default function ProfileFieldsEditor({
           src={profile.avatarSilent}
           onPick={() => onPickAvatar('silent')}
           onClear={() => onClearAvatar('silent')}
+          alignWithTabs
         />
         <SpeakingAvatarField
           variants={profile.speakingVariants}

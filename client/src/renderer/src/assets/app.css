@@ -1339,6 +1339,10 @@ input {
   border-radius: 6px;
   padding: 2px;
 }
+.pf-type-tabs--spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
 .pf-type-tab {
   padding: 3px 8px;
   font-size: 11px;
@@ -1356,17 +1360,23 @@ input {
 }
 
 .pf-frame-list {
+  --pf-frame-gap: 6px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-width: 220px;
-  justify-content: center;
+  flex-wrap: nowrap;
+  gap: var(--pf-frame-gap);
+  /* Same size as the regular avatar preview (--pf-avatar-size), capped at 5
+     visible before horizontal scroll - grows to the right as frames are
+     added, up to that cap, rather than wrapping to a new row. */
+  max-width: calc(5 * var(--pf-avatar-size) + 4 * var(--pf-frame-gap));
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .pf-frame-item {
   position: relative;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  flex: none;
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
+  border-radius: 12px;
   overflow: hidden;
   cursor: grab;
 }
@@ -1378,27 +1388,31 @@ input {
 }
 .pf-frame-remove {
   position: absolute;
-  top: 1px;
-  right: 1px;
-  width: 16px;
-  height: 16px;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   border: none;
   padding: 0;
 }
 .pf-frame-add {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  flex: none;
+  width: var(--pf-avatar-size);
+  height: var(--pf-avatar-size);
+  border-radius: 12px;
   background: rgba(109, 94, 252, 0.12);
   border: 1.5px dashed #6d5efc;
   color: #6d5efc;
-  font-size: 18px;
+  font-size: 40px;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .pf-fps-field {
   display: flex;

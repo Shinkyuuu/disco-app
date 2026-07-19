@@ -174,6 +174,7 @@ export default function PublicAvatarSection({ loggedInUserId, profile, onChange 
               busy={pendingSilent}
               onPick={handlePickSilent}
               onClear={handleClearSilent}
+              alignWithTabs
             />
             <SpeakingAvatarField
               key={loaded ? 'loaded' : 'loading'}
