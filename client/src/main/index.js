@@ -561,8 +561,8 @@ function createChatTray() {
   chatTray.on('click', focusChatWindow);
   chatTray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Show Chat', click: focusChatWindow },
-      { label: 'Close Chat', click: () => chatWindow?.close() },
+      { label: 'Close Overlay', click: () => chatWindow?.close() },
+      { label: 'Exit app', click: () => app.quit() },
     ]),
   );
 }
