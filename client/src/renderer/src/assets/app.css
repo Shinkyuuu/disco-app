@@ -212,6 +212,16 @@ input {
   background: #3a3358;
 }
 
+/* Auto width / Snap to edge while Lock window is on - Radix's `disabled`
+   prop already blocks selection and hover/keyboard highlighting, this just
+   makes that state visible. Opacity is independent of `--on`'s
+   background/color, so an already-on setting still reads as tinted-but-dim
+   underneath, not flattened to a plain disabled look. */
+.window-menu-item[data-disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .window-menu-item-arrow {
   opacity: 0.6;
 }
