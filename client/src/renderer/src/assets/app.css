@@ -729,15 +729,19 @@ input {
   flex: 1;
 }
 
-.chat-header--small {
-  height: 158px;
+.chat-header--small { 
+  height: 118px;
 }
 
 .chat-header--medium {
-  height: 221px;
+  height: 158px;
 }
 
 .chat-header--large {
+  height: 221px;
+}
+
+.chat-header--xlarge {
   height: 281px;
 }
 
@@ -745,14 +749,18 @@ input {
    custom-image portraits do, so they need much less top headroom - keep in
    sync with HEADER_HEIGHT_BY_AVATAR_SIZE_DISCORD in chatWindowSize.js. */
 .chat-header--discord.chat-header--small {
-  height: 124px;
+  height: 114px;
 }
 
 .chat-header--discord.chat-header--medium {
-  height: 160px;
+  height: 124px;
 }
 
 .chat-header--discord.chat-header--large {
+  height: 160px;
+}
+
+.chat-header--discord.chat-header--xlarge {
   height: 196px;
 }
 
@@ -818,14 +826,18 @@ input {
 }
 
 .message-line-avatar--small {
-  height: 30px;
+  height: 21px;
 }
 
 .message-line-avatar--medium {
-  height: 42px;
+  height: 30px;
 }
 
 .message-line-avatar--large {
+  height: 42px;
+}
+
+.message-line-avatar--xlarge {
   height: 54px;
 }
 
@@ -842,14 +854,18 @@ input {
 }
 
 .message-line-username--small {
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .message-line-username--medium {
-  font-size: 16px;
+  font-size: 12px;
 }
 
 .message-line-username--large {
+  font-size: 16px;
+}
+
+.message-line-username--xlarge {
   font-size: 19px;
 }
 
@@ -860,14 +876,18 @@ input {
 }
 
 .message-line-text--small {
-  font-size: 13px;
+  font-size: 10px;
 }
 
 .message-line-text--medium {
-  font-size: 17px;
+  font-size: 13px;
 }
 
 .message-line-text--large {
+  font-size: 17px;
+}
+
+.message-line-text--xlarge {
   font-size: 21px;
 }
 

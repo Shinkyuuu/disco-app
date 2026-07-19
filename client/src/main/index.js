@@ -379,7 +379,7 @@ function applyChatWindowSize(win) {
     return;
   }
 
-  const minHeight = collapsed ? height : HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT;
+  const minHeight = collapsed ? height : HEADER_HEIGHT_BY_AVATAR_SIZE.xlarge + MIN_CHAT_PANEL_HEIGHT;
   win.setMinimumSize(autoWidth ? width : 300, minHeight);
 
   if (collapsed && autoWidth) {
@@ -481,7 +481,7 @@ function createChatWindow() {
           ...(autoWidth ? { minWidth: width, maxWidth: width } : { minWidth: 300 }),
           ...(collapsed
             ? { minHeight: height, maxHeight: height }
-            : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.large + MIN_CHAT_PANEL_HEIGHT }),
+            : { minHeight: HEADER_HEIGHT_BY_AVATAR_SIZE.xlarge + MIN_CHAT_PANEL_HEIGHT }),
         }),
     frame: false,
     icon: ICON_PATH,

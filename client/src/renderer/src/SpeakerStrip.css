@@ -1,14 +1,18 @@
 .speaker-strip {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .speaker-strip--medium {
-  gap: 10px;
+  gap: 8px;
 }
 
 .speaker-strip--large {
+  gap: 10px;
+}
+
+.speaker-strip--xlarge {
   gap: 12px;
 }
 
@@ -23,7 +27,7 @@
 .speaker-username {
   position: relative;
   z-index: 1;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: #ffffff;
   background: rgba(0, 0, 0, 0.72);
@@ -31,18 +35,23 @@
   padding: 2px 6px;
   margin-bottom: 5px;
   white-space: nowrap;
-  max-width: 80px;
+  max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
 }
 
 .speaker--medium .speaker-username {
+  font-size: 11px;
+  max-width: 80px;
+}
+
+.speaker--large .speaker-username {
   font-size: 12px;
   max-width: 100px;
 }
 
-.speaker--large .speaker-username {
+.speaker--xlarge .speaker-username {
   font-size: 13px;
   max-width: 120px;
 }
@@ -56,9 +65,9 @@
   position: absolute;
   right: -4px;
   bottom: 2px;
-  width: 18px;
-  height: 18px;
-  padding: 3px;
+  width: 14px;
+  height: 14px;
+  padding: 2px;
   background: #0d0e11;
   border-radius: 50%;
   color: #f04747;
@@ -70,16 +79,23 @@
 }
 
 .speaker--medium .speaker-status-icon {
+  width: 18px;
+  height: 18px;
+  padding: 3px;
+}
+
+.speaker--large .speaker-status-icon {
   width: 22px;
   height: 22px;
   padding: 4px;
 }
 
-.speaker--large .speaker-status-icon {
+.speaker--xlarge .speaker-status-icon {
   width: 26px;
   height: 26px;
   padding: 5px;
 }
+
 
 .speaker-icon {
   /* Fixed bounding box - object-fit scales the source image down to fit
@@ -95,39 +111,51 @@
    speaking-glow's bleed (scale/translateY/blur) - so neither ever clips
    against the top of the window. */
 .speaker-icon--discord {
-  width: 73px;
-  height: 73px;
+  width: 67px;
+  height: 67px;
   border-radius: 50%; /* Discord avatars are square sources, so this is a circle */
   margin-bottom: 14px; /* floats just above the chat panel's top edge */
   filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.4));
 }
 
 .speaker-icon--discord.speaker-icon--medium {
+  width: 73px;
+  height: 73px;
+  margin-bottom: 14px;
+}
+
+.speaker-icon--discord.speaker-icon--large {
   width: 102px;
   height: 102px;
   margin-bottom: 19px;
 }
 
-.speaker-icon--discord.speaker-icon--large {
+.speaker-icon--discord.speaker-icon--xlarge {
   width: 130px;
   height: 130px;
   margin-bottom: 24px;
 }
 
 .speaker-icon--custom {
-  width: 96px; /* box is a portrait rectangle (0.8x height), not square */
-  height: 120px;
+  width: 75px; /* box is a portrait rectangle (0.8x height), not square */
+  height: 94px;
   border-radius: 0; /* character art, not a round avatar - don't clip it */
   margin-bottom: -11px; /* bottom overlaps behind the chat panel (higher z-index) - "peeking out" */
 }
 
 .speaker-icon--custom.speaker-icon--medium {
+  width: 96px;
+  height: 120px;
+  margin-bottom: -11px;
+}
+
+.speaker-icon--custom.speaker-icon--large {
   width: 146px;
   height: 183px;
   margin-bottom: -18px;
 }
 
-.speaker-icon--custom.speaker-icon--large {
+.speaker-icon--custom.speaker-icon--xlarge {
   width: 194px;
   height: 243px;
   margin-bottom: -24px;

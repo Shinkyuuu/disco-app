@@ -20,12 +20,12 @@
 // in a test would run them).
 
 export const CHAT_PANEL_HEIGHT = 324;
-export const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 158, medium: 221, large: 281 };
+export const HEADER_HEIGHT_BY_AVATAR_SIZE = { small: 118, medium: 158, large: 221, xlarge: 281 };
 // Discord-mode avatars are shorter/rounder than custom-image portraits and
 // don't bleed below the header, so they need much less top headroom to clear
 // the username label and the speaking-glow's blur/scale bleed - see the
 // matching .chat-header--discord heights in app.css.
-export const HEADER_HEIGHT_BY_AVATAR_SIZE_DISCORD = { small: 124, medium: 160, large: 196 };
+export const HEADER_HEIGHT_BY_AVATAR_SIZE_DISCORD = { small: 114, medium: 124, large: 160, xlarge: 196 };
 export const MIN_CHAT_PANEL_HEIGHT = 100;
 
 function headerHeightFor(avatarSize, avatarMode) {
@@ -44,13 +44,13 @@ export function chatWindowHeightFor(avatarSize, { collapsed = false, panelHeight
 export { headerHeightFor };
 
 // Avatar box widths per avatar size - keep in sync with .speaker-icon--discord
-// / .speaker-icon--custom in SpeakerStrip.css. Custom-mode portraits are
+// / .speaker-icon--custom in SpeakerStrip.css. Custom-mode portraits are 
 // wider rectangles than the round discord avatars, hence the separate table
 // (same distinction as HEADER_HEIGHT_BY_AVATAR_SIZE / _DISCORD above).
-export const AVATAR_WIDTH_BY_SIZE = { small: 96, medium: 146, large: 194 };
-export const AVATAR_WIDTH_BY_SIZE_DISCORD = { small: 73, medium: 102, large: 130 };
+export const AVATAR_WIDTH_BY_SIZE = { small: 75, medium: 96, large: 146, xlarge: 194 };
+export const AVATAR_WIDTH_BY_SIZE_DISCORD = { small: 67, medium: 73, large: 102, xlarge: 130 };
 // .speaker-strip's gap, per avatar size - see SpeakerStrip.css.
-export const AVATAR_GAP_BY_SIZE = { small: 8, medium: 10, large: 12 };
+export const AVATAR_GAP_BY_SIZE = {small: 6, medium: 8, large: 10, xlarge: 12 };
 // .chat-header's left+right padding in app.css (16px each side) - the avatar
 // row's horizontal breathing room the window width also has to include.
 const HEADER_HORIZONTAL_PADDING = 32;
