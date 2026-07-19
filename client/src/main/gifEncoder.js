@@ -29,7 +29,7 @@ export class GifEncodingError extends Error {}
 export const MIN_FRAMES = 2;
 export const MAX_FRAMES = 30;
 export const MAX_FRAME_BYTES = 2 * 1024 * 1024; // 2MB
-export const MAX_FRAME_DIMENSION = 2048; // decoded px, per side
+export const MAX_FRAME_DIMENSION = 2048; // output px, per side - frames are downscaled to fit, never rejected for being too large
 export const MIN_FPS = 1;
 export const MAX_FPS = 30;
 
@@ -52,27 +52,23 @@ export function validateFrameInputs(frameFilePaths, fps) {
 // Encodes an ordered list of still images into a single animated GIF, played
 // at `fps`. Runs only when a user saves a Frames avatar set in Settings -
 // never on the caption-rendering hot path - so its cost (decode + 256-color
-// quantize per frame) doesn't touch this app's speed priority. First frame's
-// dimensions are used for every frame (later frames are resized to match).
+// quantize per frame) doesn't touch this app's speed priority. Frames of any
+// resolution are accepted, same as the Silent/Image/GIF pickers - the first
+// frame's dimensions (downscaled to fit MAX_FRAME_DIMENSION, preserving its
+// aspect ratio, if it's larger than that) become the canonical size, and
+// every frame - including the first - is resized to match.
 export async function encodeFramesToGif(frameFilePaths, fps) {
   validateFrameInputs(frameFilePaths, fps);
 
   const images = await Promise.all(frameFilePaths.map((filePath) => Jimp.read(filePath)));
 
-  // MAX_FRAME_BYTES only bounds each frame's encoded (on-disk) size - a small,
-  // highly-compressible file can still decode into a huge pixel buffer (a
-  // classic decompression-bomb shape). Reject oversized decoded dimensions
-  // here, before the resize/quantize loop below does real work on them.
-  for (let i = 0; i < images.length; i++) {
-    const { width: w, height: h } = images[i].bitmap;
-    if (w > MAX_FRAME_DIMENSION || h > MAX_FRAME_DIMENSION) {
-      throw new GifEncodingError(
-        `Frame ${frameFilePaths[i]} decodes to ${w}x${h}px, exceeding the ${MAX_FRAME_DIMENSION}px-per-side limit`,
-      );
-    }
+  let { width, height } = images[0].bitmap;
+  const longestSide = Math.max(width, height);
+  if (longestSide > MAX_FRAME_DIMENSION) {
+    const scale = MAX_FRAME_DIMENSION / longestSide;
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
   }
-
-  const { width, height } = images[0].bitmap;
 
   const gif = GIFEncoder();
   const delay = Math.round(1000 / fps); // gifenc takes milliseconds, converts to GIF centiseconds internally
