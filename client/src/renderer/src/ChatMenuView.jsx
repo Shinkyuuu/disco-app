@@ -21,6 +21,7 @@ const SIZES = [
   { value: 'small', label: 'Small' },
   { value: 'medium', label: 'Medium' },
   { value: 'large', label: 'Large' },
+  { value: 'xlarge', label: 'X-Large' },
 ];
 
 // Shared shape for the "Avatar size" and "Chat size" submenus below - a
