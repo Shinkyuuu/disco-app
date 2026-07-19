@@ -89,11 +89,15 @@ export function slotDirName(slotIndex) {
 // avatarSpeaking resolves from whichever variant `speakingAvatarType` names
 // ('image'|'gif'|'frames'|null) - the other two saved-but-inactive variants
 // stay on disk untouched (Section 3.1 of the design spec: switching types
-// never discards the others).
+// never discards the others). A profile with no `speakingAvatarType` set yet
+// (every default slot on a fresh install, and any friend/default profile
+// from before this field existed) defaults to 'image' - the bundled/legacy
+// speaking.* assets were always plain images, and readAvatarDataUrl already
+// resolves to null harmlessly if no speaking-image.* file actually exists.
 function readImagesFor(scope, id, speakingAvatarType) {
   return {
     avatarSilent: readAvatarDataUrl(scope, id, 'silent'),
-    avatarSpeaking: speakingAvatarType ? readAvatarDataUrl(scope, id, `speaking-${speakingAvatarType}`) : null,
+    avatarSpeaking: readAvatarDataUrl(scope, id, `speaking-${speakingAvatarType ?? 'image'}`),
   };
 }
 
@@ -115,7 +119,7 @@ function speakingVariantsFor(scope, id, speakingAvatarType) {
   const framesUrl = readAvatarDataUrl(scope, id, 'speaking-frames');
   const meta = framesUrl ? readFramesMeta(scope, id) : null;
   return {
-    activeType: speakingAvatarType ?? null,
+    activeType: speakingAvatarType ?? 'image',
     image,
     gif,
     frames: framesUrl && meta ? { url: framesUrl, fps: meta.fps, frameCount: meta.frameCount } : null,
