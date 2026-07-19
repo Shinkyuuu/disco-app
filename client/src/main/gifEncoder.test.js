@@ -137,17 +137,26 @@ test('encodeFramesToGif rejects invalid inputs before doing any decoding work', 
   await assert.rejects(() => encodeFramesToGif([tmpFileOfSize(100)], 6), GifEncodingError);
 });
 
-// MAX_FRAME_BYTES only bounds each frame's encoded (on-disk) size - a small,
-// highly-compressible file can still decode into a huge pixel buffer. Uses a
-// tall-and-thin (not square) shape to exceed MAX_FRAME_DIMENSION on one side
-// while keeping the actual decoded pixel count - and this test's real
-// runtime cost - small.
-test('encodeFramesToGif rejects a frame whose decoded dimensions exceed MAX_FRAME_DIMENSION', async () => {
-  const frames = await Promise.all([tmpSolidColorPng(MAX_FRAME_DIMENSION + 1, 2, 0xff0000ff), tmpSolidColorPng(4, 4, 0x00ff00ff)]);
+// Frames of any resolution are accepted (matching the Silent/Image/GIF
+// pickers, which have no dimension limit) - a frame larger than
+// MAX_FRAME_DIMENSION is downscaled to fit rather than rejected. Uses a
+// wide-but-short (not square) shape so the oversized side is easy to assert
+// on precisely while keeping the actual decoded pixel count - and this
+// test's real runtime cost - small.
+test('encodeFramesToGif downscales a frame whose decoded dimensions exceed MAX_FRAME_DIMENSION, rather than rejecting it', async () => {
+  const oversizedWidth = MAX_FRAME_DIMENSION * 2;
+  const frames = await Promise.all([tmpSolidColorPng(oversizedWidth, 2, 0xff0000ff), tmpSolidColorPng(4, 4, 0x00ff00ff)]);
 
-  await assert.rejects(() => encodeFramesToGif(frames, 6), (err) => {
-    assert.ok(err instanceof GifEncodingError);
-    assert.match(err.message, /exceeding the \d+px-per-side limit/);
-    return true;
-  });
+  const gifBytes = await encodeFramesToGif(frames, 6);
+
+  assert.equal(gifBytes.subarray(0, 6).toString('ascii'), 'GIF89a');
+  // GIF's Logical Screen Descriptor stores the canvas width/height as two
+  // little-endian uint16s immediately after the 6-byte header - this is the
+  // size every frame (including this oversized one) was resized to match.
+  const canvasWidth = gifBytes[6] | (gifBytes[7] << 8);
+  const canvasHeight = gifBytes[8] | (gifBytes[9] << 8);
+  const expectedScale = MAX_FRAME_DIMENSION / oversizedWidth;
+  assert.equal(canvasWidth, Math.round(oversizedWidth * expectedScale));
+  assert.equal(canvasHeight, Math.round(2 * expectedScale));
+  assert.ok(canvasWidth <= MAX_FRAME_DIMENSION);
 });
