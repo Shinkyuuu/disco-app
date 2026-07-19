@@ -40,6 +40,7 @@ import { fetchProfile, AuthError } from './profileClient.js';
 import { isRetryableAuthFailure } from './authFailure.js';
 import {
   reconcileFriendProfiles,
+  migrateLegacySpeakingAvatars,
   seedDefaultProfileColors,
   resolveSpeakerProfile,
   getDefaultProfiles,
@@ -694,6 +695,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     reconcileFriendProfiles(store);
+    migrateLegacySpeakingAvatars(store);
     seedDefaultProfileColors(store);
     registerIpcHandlers();
     createUpdaterWindow();

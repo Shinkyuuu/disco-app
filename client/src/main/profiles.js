@@ -165,6 +165,27 @@ export function reconcileFriendProfiles(store) {
   if (changed) store.set('friendProfiles', friendProfiles);
 }
 
+// Runs once at startup, after reconcileFriendProfiles (so hand-created friend
+// folders are already known): renames any pre-existing bare speaking.* user
+// override - from before speaking avatars split into image/gif/frames
+// variants - to speaking-image.*, the name findAvatarFile now looks for.
+// Only touches userAvatarsRoot() - bundled resources already ship under the
+// new name (see the design spec's migration note) and may not be writable in
+// a packaged build anyway. A no-op after the first run, since the legacy file
+// no longer exists once renamed.
+export function migrateLegacySpeakingAvatars(store) {
+  const dirs = [
+    ...Array.from({ length: 10 }, (_, i) => scopeDir(userAvatarsRoot(), 'default', slotDirName(i))),
+    ...Object.keys(store.get('friendProfiles')).map((userId) => scopeDir(userAvatarsRoot(), 'friend', userId)),
+  ];
+  for (const dir of dirs) {
+    const legacy = findAvatarFile(dir, 'speaking');
+    if (!legacy) continue;
+    const migrated = path.join(dir, `speaking-image${path.extname(legacy)}`);
+    if (!fs.existsSync(migrated)) fs.renameSync(legacy, migrated);
+  }
+}
+
 // The logged-in user's own entry in friendProfiles (created by the removed
 // "Your Profile" UI, or by setting colors via Public Avatar) must never
 // surface as an avatar-image override: resolveAppearance.js ranks a friend
