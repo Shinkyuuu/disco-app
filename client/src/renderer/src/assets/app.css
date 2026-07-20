@@ -585,16 +585,50 @@ input {
 
 /* margin-top: auto claims the aurora-stage flex column's remaining free
    space, pinning this to the bottom without overlapping .launcher-content -
-   position: absolute here would let the container grow underneath it. */
-.launcher-version {
+   position: absolute here would let the container grow underneath it.
+   align-self: center keeps it compact rather than stretching to
+   .aurora-stage's full width (its default cross-axis alignment). */
+.launcher-version-row {
   position: relative;
   z-index: 1;
   flex: none;
+  align-self: center;
   margin: auto 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.launcher-version-text {
   font-size: 12px;
-  opacity: 0.5;
-  text-align: center;
-  pointer-events: none;
+  opacity: 0.65;
+}
+
+.launcher-whats-new-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--accent);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.launcher-whats-new-chip:hover {
+  filter: brightness(1.1);
+}
+
+.launcher-whats-new-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #ffffff;
 }
 
 .launcher-content button {
@@ -1204,6 +1238,90 @@ input {
 .about-scroll .settings-field input {
   background: var(--surface-2);
   color: #c4bdf0;
+}
+
+/* --- release notes page: vertical timeline (see ReleaseNotesView.jsx) --- */
+.release-notes-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.release-notes-entry {
+  display: flex;
+  gap: 16px;
+}
+
+.release-notes-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 10px;
+  flex: none;
+}
+
+.release-notes-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(150, 138, 220, 0.35);
+}
+
+.release-notes-dot--current {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(124, 108, 227, 0.25);
+}
+
+.release-notes-line {
+  width: 2px;
+  flex: 1;
+  margin-top: 4px;
+  background: var(--border-soft);
+}
+
+.release-notes-body {
+  flex: 1;
+  padding-bottom: 80px;
+}
+
+.release-notes-entry:last-child .release-notes-body {
+  padding-bottom: 0;
+}
+
+.release-notes-version {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.release-notes-date {
+  margin: 2px 0 10px;
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.release-notes-changes {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #ffffff;
+}
+
+.release-notes-sub-changes {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  opacity: 0.8;
+  list-style: circle;
 }
 
 /* Your Profile - pinned, accent background instead of the section's default */

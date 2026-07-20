@@ -19,6 +19,8 @@ import TitleBar from './TitleBar';
 import ErrorBanner from './ErrorBanner';
 import SettingsView from './settings/SettingsView';
 import AboutView from './AboutView';
+import ReleaseNotesView from './ReleaseNotesView';
+import { RELEASE_NOTES } from './releaseNotes';
 import ProfileHeader from './ProfileHeader';
 import ProfileCompanion from './ProfileCompanion';
 import BorderGlow from './BorderGlow';
@@ -108,6 +110,8 @@ function LoginIcon() {
     </svg>
   );
 }
+
+const LATEST_RELEASE_VERSION = RELEASE_NOTES[0].version;
 
 export default function LauncherView() {
   const [settings, setSettings] = useState(null);
@@ -209,6 +213,14 @@ export default function LauncherView() {
     if (persist) window.api.setSettings(partial);
   }
 
+  // Marking the release "seen" the moment the page is opened (rather than
+  // inside ReleaseNotesView itself) keeps that view purely presentational,
+  // matching AboutView's shape.
+  function handleOpenReleaseNotes() {
+    handleSettingsChange({ lastSeenReleaseVersion: LATEST_RELEASE_VERSION }, true);
+    setPage('release-notes');
+  }
+
   return (
     <div className="launcher-root">
       <TitleBar title="Disco" />
@@ -230,6 +242,8 @@ export default function LauncherView() {
           />
         ) : page === 'about' ? (
           <AboutView onBack={() => setPage('main')} />
+        ) : page === 'release-notes' ? (
+          <ReleaseNotesView onBack={() => setPage('main')} />
         ) : (
           <>
             <div className={`launcher-card-wrap${showCompanion ? ' launcher-card-wrap--peeking' : ''}`}>
@@ -287,7 +301,17 @@ export default function LauncherView() {
             </div>
           </>
         )}
-        {page === 'main' && <p className="launcher-version">v{settings.appVersion}</p>}
+        {page === 'main' && (
+          <div className="launcher-version-row">
+            <span className="launcher-version-text">v{settings.appVersion}</span>
+            <button className="launcher-whats-new-chip" onClick={handleOpenReleaseNotes}>
+              {settings.lastSeenReleaseVersion !== LATEST_RELEASE_VERSION && (
+                <span className="launcher-whats-new-dot" aria-hidden="true" />
+              )}
+              What's New
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
