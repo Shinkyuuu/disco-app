@@ -29,6 +29,7 @@ export const store = new Store({
     chatFontFamily: 'plus-jakarta-sans',
     chatBorderStyle: 'hard',
     betaUpdates: false,
+    lastSeenReleaseVersion: null,
     chatWindowWidth: 480,
     chatWindowPanelHeight: 324,
     chatWindowPosition: null,
