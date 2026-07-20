@@ -33,6 +33,7 @@ export const SETTABLE_KEYS = new Set([
   'chatFontFamily',
   'chatBorderStyle',
   'betaUpdates',
+  'lastSeenReleaseVersion',
 ]);
 
 export function sanitizeSettingsPatch(partial) {

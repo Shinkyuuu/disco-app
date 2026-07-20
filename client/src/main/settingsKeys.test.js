@@ -50,6 +50,12 @@ test('betaUpdates is allowlisted', () => {
   assert.deepEqual(sanitizeSettingsPatch({ betaUpdates: true }), { betaUpdates: true });
 });
 
+test('lastSeenReleaseVersion is allowlisted', () => {
+  assert.deepEqual(sanitizeSettingsPatch({ lastSeenReleaseVersion: '1.1.0' }), {
+    lastSeenReleaseVersion: '1.1.0',
+  });
+});
+
 test('chatSnapToEdge is allowlisted', () => {
   assert.deepEqual(sanitizeSettingsPatch({ chatSnapToEdge: true }), { chatSnapToEdge: true });
 });

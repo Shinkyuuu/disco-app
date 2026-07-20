@@ -746,6 +746,7 @@ function registerIpcHandlers() {
     chatFontFamily: store.get('chatFontFamily'),
     chatBorderStyle: store.get('chatBorderStyle'),
     betaUpdates: store.get('betaUpdates'),
+    lastSeenReleaseVersion: store.get('lastSeenReleaseVersion'),
     hasSessionToken: Boolean(store.get('sessionToken')),
     loggedInUserId: store.get('loggedInUserId'),
     appVersion: app.getVersion(),
